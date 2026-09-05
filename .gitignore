@@ -1,21 +1,19 @@
-# Build artifacts
-*.o
-*.obj
-*.a
-*.so
-*.dll
-*.dylib
-*.exe
-*.bin
-*.elf
-*.img
-*.iso
+# Python cache and generated artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
-# Compiled output
-/build/
-/dist/
-/out/
-/target/
+# Local build output
+build/
+output/
+*.iso
+*.qcow2
+*.raw
+*.img
 
 # Editor / OS noise
 .DS_Store
@@ -29,3 +27,10 @@ Thumbs.db
 *.log
 *.tmp
 *~
+
+# Secrets
+.env
+.env.*
+*.pem
+*.key
+*.crt

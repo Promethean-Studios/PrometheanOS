@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Build a Fedora Workstation live ISO using a containerized livemedia-creator flow.
-# This script is intended for a Fedora host or a Fedora-based container environment.
+# Build a Fedora KDE Plasma live ISO in a disposable container. This never writes
+# to host disks; it only reads the repo and emits an ISO under build/output.
 
-IMAGE_NAME="${IMAGE_NAME:-fedora-workstation-live}"
+IMAGE_NAME="${IMAGE_NAME:-fedora-kde-live}"
 OUTPUT_DIR="${OUTPUT_DIR:-$(pwd)/build/output}"
 KICKSTART_FILE="${KICKSTART_FILE:-$(pwd)/kickstarts/promethean-base.ks}"
 FEDORA_RELEASE="${FEDORA_RELEASE:-40}"
@@ -33,10 +33,9 @@ podman run --rm \
     dnf -y install lorax livemedia-creator isomd5sum pykickstart
     livemedia-creator \
       --make=live \
-      --iso=/tmp/fedora-live.iso \
       --ks=/workspace/kickstarts/promethean-base.ks \
       --resultdir=/output \
-      --title="PrometheanOS" \
+      --title="PrometheanOS-KDE" \
       --volid="PROMETHEANOS"
   '
 

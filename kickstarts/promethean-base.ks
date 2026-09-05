@@ -1,5 +1,7 @@
-# Fedora 40/41 Workstation-based PrometheanOS V1 kickstart
-# Produces a Fedora Workstation install with the Promethean AI desktop baseline.
+# Fedora 40/41 KDE Plasma kickstart for PrometheanOS V1
+# This image is intended for a disposable VM or a dedicated target disk
+# chosen by the user during a real installation. It is not a host-destructive
+# automation script and should not be used against an arbitrary local disk.
 
 # Installation source
 url --mirrorlist="https://mirrors.fedoraproject.org/metalink"
@@ -12,6 +14,8 @@ keyboard us
 timezone UTC --utc
 
 # Disk and boot
+# These commands are intentionally kept for the installer stage only; the
+# containerized build workflow in build.sh never writes to the host disk.
 zerombr
 clearpart --all --initlabel
 autopart --type=lvm --fstype=xfs
@@ -20,20 +24,20 @@ bootloader --location=mbr --append="rhgb quiet"
 # Network
 network --bootproto=dhcp --device=link --activate
 
-# Root lockout; create a standard user for daily operation
+# Root locked by default; create a non-root user that must authenticate for sudo.
 rootpw --lock
-user --name=promethean --groups=wheel --password=promethean --plaintext
+user --name=promethean --groups=wheel --lock --shell=/bin/bash
 
-# Core packages: workstation + build tooling + AI/desktop prerequisites
+# KDE Plasma base + AI/development tools. No NVIDIA/CUDA packages are mandatory.
 %packages
 @core
-@workstation-product-environment
-@standard
-@development-tools
+@kde-desktop-environment
+@kde-apps
 @networkmanager-submodules
 @fonts
-@multimedia
-@admin-tools
+@printing
+@base-x
+@development-tools
 sudo
 git
 gh
@@ -56,13 +60,14 @@ dkms
 podman
 flatpak
 firewalld
+NetworkManager-wifi
+pipewire
+pipewire-alsa
+pipewire-pulseaudio
+wireplumber
 nss-mdns
 rpmfusion-free-release
 rpmfusion-nonfree-release
-nvidia-driver
-nvidia-settings
-cuda
-cuda-toolkit
 %end
 
 # Post-install configuration
@@ -104,44 +109,42 @@ gpgcheck=1
 gpgkey=https://download1.rpmfusion.org/RPM-GPG-KEY-rpmfusion-nonfree-fedora-$releasever
 EOF
 
-# NVIDIA and CUDA repositories: official NVIDIA RPM repo and negativo17 fallback.
-cat > /etc/yum.repos.d/nvidia-official.repo <<'EOF'
-[nvidia-official]
-name=NVIDIA Official RPMs
-baseurl=https://developer.download.nvidia.com/compute/cuda/repos/fedora$releasever/$basearch/
-enabled=1
-gpgcheck=1
-gpgkey=https://developer.download.nvidia.com/compute/cuda/repos/fedora$releasever/$basearch/D42D0685.pub
+# Explicit NVIDIA/CUDA repo definitions are optional and disabled by default.
+# Vendor-specific driver setup is handled by the Promethean hardware detection
+# flow after an actual GPU is detected on the target machine.
+cat > /etc/yum.repos.d/promethean-vendor-gpu.optional <<'EOF'
+# NVIDIA / CUDA repo definitions can be added here only when a target machine
+# has a supported NVIDIA GPU and the operator chooses to install the proprietary
+# stack. They are intentionally not enabled in the base image.
 EOF
 
-cat > /etc/yum.repos.d/negativo17-fedora-nvidia.repo <<'EOF'
-[negativo17-fedora-nvidia]
-name=Negativo17 - Fedora NVIDIA driver repository
-baseurl=https://negativo17.org/repos/fedora-nvidia.repo/fedora-$releasever/$basearch/
-enabled=1
-skip_if_unavailable=1
-gpgcheck=1
-gpgkey=https://negativo17.org/RPM-GPG-KEY-negativo17
+# Allow the standard wheel group to use sudo using a password challenge.
+# This keeps administrative access available to the human operator without
+# shipping a known default password or granting unrestricted NOPASSWD access.
+printf '%s\n' '%wheel ALL=(ALL) ALL' > /etc/sudoers.d/10-promethean-wheel
+chmod 0440 /etc/sudoers.d/10-promethean-wheel
+
+# KDE Plasma should default to Wayland and SDDM.
+mkdir -p /etc/sddm.conf.d /etc/profile.d
+cat > /etc/sddm.conf.d/10-wayland.conf <<'EOF'
+[General]
+DisplayServer=wayland
 EOF
 
-# Passwordless sudo for the default non-root user
-printf '%s\n' 'promethean ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/promethean
-chmod 0440 /etc/sudoers.d/promethean
-
-# Default to Wayland for Workstation sessions
-mkdir -p /etc/profile.d
 cat > /etc/profile.d/promethean-wayland.sh <<'EOF'
 export XDG_SESSION_TYPE=wayland
 export QT_QPA_PLATFORM=wayland
 export GDK_BACKEND=wayland
 EOF
 
-# Enable standard services
+# Standard services for the KDE desktop environment.
 systemctl enable NetworkManager
 systemctl enable firewalld
+systemctl enable sddm
 systemctl enable sshd
 systemctl enable podman
+systemctl set-default graphical.target
 %end
 
-# Finalize installation
+# Finalize installation.
 reboot
