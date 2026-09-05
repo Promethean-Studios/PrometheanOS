@@ -1,0 +1,21 @@
+[Unit]
+Description=Promethean local system API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=promethean
+Group=promethean
+WorkingDirectory=/srv/promethean
+ExecStart=/usr/bin/python3 -m src.system.api.server
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=read-only
+ProtectHome=yes
+ReadWritePaths=/var/log /data/models
+
+[Install]
+WantedBy=multi-user.target
