@@ -68,6 +68,21 @@ def test_api_rejects_malformed_or_private_paths():
     thread.join(timeout=5)
 
 
+def test_api_serves_control_center_and_live_telemetry():
+    api = LocalPrometheanAPI(service=PrometheanService(), host="127.0.0.1", port=8768)
+    thread = Thread(target=api.serve_forever, daemon=True)
+    thread.start()
+    assert api.wait_until_ready(timeout=5)
+    import urllib.request
+
+    html = urllib.request.urlopen("http://127.0.0.1:8768/control-center", timeout=5).read().decode()
+    telemetry = json.loads(urllib.request.urlopen("http://127.0.0.1:8768/telemetry", timeout=5).read())
+    assert "Promethean Control Center" in html
+    assert {"cpu", "memory", "gpu", "storage", "network", "ai"}.issubset(telemetry)
+    api.shutdown()
+    thread.join(timeout=5)
+
+
 def test_unsafely_implemented_permission_boundaries():
     service = PrometheanService()
     permissions = service.get_permissions()

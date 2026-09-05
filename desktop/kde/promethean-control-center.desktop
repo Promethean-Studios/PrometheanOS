@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Promethean Control Center
+Comment=Local hardware and AI telemetry
+Exec=xdg-open http://127.0.0.1:8765/control-center
+Icon=computer
+Terminal=false
+Categories=Settings;System;

@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 import json
+import mimetypes
+from pathlib import Path
+from urllib.parse import parse_qs, unquote, urlparse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Event
 from typing import Any, Dict, Optional
 
 from src.system.services.promethean_service import PrometheanService
+
+
+CONTROL_CENTER_ROOT = Path(__file__).resolve().parents[2] / "desktop" / "control-center"
 
 
 class PrometheanRequestHandler(BaseHTTPRequestHandler):
@@ -28,6 +34,25 @@ class PrometheanRequestHandler(BaseHTTPRequestHandler):
             self._send_json(self.server.service.get_permissions())
             return
 
+        parsed = urlparse(self.path)
+        if parsed.path == "/control-center" or parsed.path.startswith("/control-center/"):
+            self._send_control_center(parsed.path)
+            return
+
+        if parsed.path == "/models":
+            self._send_json({"models": self.server.service.get_models()})
+            return
+
+        if parsed.path == "/models/recommend":
+            name = parse_qs(parsed.query).get("name", [None])[0]
+            profile = parse_qs(parsed.query).get("profile", ["balanced"])[0]
+            model = next((item for item in self.server.service.model_manager.discover() if item.name == name), None)
+            if model is None:
+                self.send_error(404, "Model not found")
+                return
+            self._send_json(self.server.service.recommend_model(model, profile))
+            return
+
         self.send_error(404, "Not found")
 
     def log_message(self, format, *args):
@@ -37,6 +62,25 @@ class PrometheanRequestHandler(BaseHTTPRequestHandler):
         body = json.dumps(payload).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _send_control_center(self, request_path: str):
+        relative = request_path.removeprefix("/control-center/") if request_path != "/control-center" else "index.html"
+        candidate = (CONTROL_CENTER_ROOT / unquote(relative)).resolve()
+        try:
+            candidate.relative_to(CONTROL_CENTER_ROOT.resolve())
+        except ValueError:
+            self.send_error(404, "Not found")
+            return
+        if not candidate.is_file():
+            self.send_error(404, "Not found")
+            return
+        content_type = mimetypes.guess_type(candidate.name)[0] or "application/octet-stream"
+        body = candidate.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="3840" height="2160" viewBox="0 0 1920 1080">
+  <defs>
+    <linearGradient id="base" x2="1" y2="1"><stop stop-color="#101615"/><stop offset=".55" stop-color="#182624"/><stop offset="1" stop-color="#101b24"/></linearGradient>
+    <radialGradient id="glow"><stop stop-color="#ccf45b" stop-opacity=".24"/><stop offset="1" stop-color="#ccf45b" stop-opacity="0"/></radialGradient>
+    <radialGradient id="blue"><stop stop-color="#8fd4ff" stop-opacity=".18"/><stop offset="1" stop-color="#8fd4ff" stop-opacity="0"/></radialGradient>
+  </defs>
+  <rect width="1920" height="1080" fill="url(#base)"/>
+  <circle cx="1510" cy="140" r="700" fill="url(#glow)"/>
+  <circle cx="260" cy="1030" r="610" fill="url(#blue)"/>
+  <path d="M-60 840 C420 500 640 110 1160 180 S1740 520 1990 260" fill="none" stroke="#ccf45b" stroke-opacity=".12" stroke-width="2"/>
+  <path d="M-80 900 C430 570 710 190 1190 260 S1700 600 2000 350" fill="none" stroke="#8fd4ff" stroke-opacity=".09" stroke-width="1"/>
+  <g transform="translate(1460 470) rotate(45)"><rect width="92" height="92" rx="30" fill="#ccf45b" fill-opacity=".88"/><rect x="22" y="22" width="48" height="48" rx="17" fill="#182624"/></g>
+  <text x="120" y="930" fill="#f0f1ed" fill-opacity=".8" font-family="sans-serif" font-size="22" letter-spacing="8">PROMETHEAN OS</text>
+</svg>

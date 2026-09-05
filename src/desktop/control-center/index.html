@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Promethean Control Center</title>
+  <link rel="stylesheet" href="/control-center/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Promethean navigation">
+      <div class="brand-mark"><span class="brand-orb"></span><span>Promethean</span></div>
+      <p class="eyebrow">AI workstation</p>
+      <nav>
+        <a class="nav-item active" href="#overview"><span class="nav-icon">◈</span>Overview</a>
+        <a class="nav-item" href="#workloads"><span class="nav-icon">⌁</span>AI workloads</a>
+        <a class="nav-item" href="#storage"><span class="nav-icon">▤</span>Storage</a>
+        <a class="nav-item" href="#settings"><span class="nav-icon">◌</span>Settings</a>
+      </nav>
+      <div class="sidebar-footer">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span><strong>Local control plane</strong><small id="connection-status">Connecting</small></span>
+      </div>
+    </aside>
+
+    <main class="content">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">System telemetry</p>
+          <h1>Good evening, operator.</h1>
+        </div>
+        <div class="topbar-actions">
+          <button class="icon-button" id="refresh-button" title="Refresh telemetry" aria-label="Refresh telemetry">↻</button>
+          <button class="mode-toggle" id="theme-toggle" type="button"><span class="mode-icon">☼</span><span>Light</span></button>
+        </div>
+      </header>
+
+      <section id="overview" class="hero-panel">
+        <div>
+          <p class="eyebrow accent">PROMETHEAN OS</p>
+          <h2>Your local intelligence,<br><em>clearly in view.</em></h2>
+          <p class="hero-copy">A calm command surface for the hardware and AI workloads running on this machine.</p>
+        </div>
+        <div class="hero-spark" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+      </section>
+
+      <section class="metrics-grid" aria-label="Hardware overview">
+        <article class="metric-card metric-wide"><div class="card-heading"><span>CPU</span><span class="metric-status" id="cpu-status">●</span></div><strong id="cpu-value">Unavailable</strong><p id="cpu-detail">Waiting for telemetry</p><div class="meter"><span id="cpu-meter"></span></div></article>
+        <article class="metric-card"><div class="card-heading"><span>RAM</span><span class="card-glyph">RAM</span></div><strong id="ram-value">Unavailable</strong><p id="ram-detail">Waiting for telemetry</p><div class="meter"><span id="ram-meter"></span></div></article>
+        <article class="metric-card"><div class="card-heading"><span>GPU</span><span class="card-glyph">GPU</span></div><strong id="gpu-value">Unavailable</strong><p id="gpu-detail">Waiting for telemetry</p></article>
+        <article class="metric-card"><div class="card-heading"><span>VRAM</span><span class="card-glyph">VRAM</span></div><strong id="vram-value">Unavailable</strong><p id="vram-detail">Waiting for telemetry</p><div class="meter"><span id="vram-meter"></span></div></article>
+      </section>
+
+      <div class="section-grid">
+        <section id="workloads" class="surface workload-surface">
+          <div class="section-heading"><div><p class="eyebrow">Live activity</p><h3>AI workloads</h3></div><span class="live-pill"><i></i>Live</span></div>
+          <div id="workload-list" class="workload-list"><div class="empty-state">No workload data available.</div></div>
+        </section>
+        <section id="storage" class="surface storage-surface">
+          <div class="section-heading"><div><p class="eyebrow">Capacity</p><h3>Storage</h3></div><span class="section-icon">▤</span></div>
+          <div class="storage-ring" id="storage-ring"><div><strong id="storage-percent">--</strong><small>used</small></div></div>
+          <div class="storage-meta"><span><i class="legend model"></i>Model storage</span><strong id="storage-models">Unavailable</strong></div>
+          <div class="storage-meta"><span><i class="legend free"></i>Available</span><strong id="storage-free">Unavailable</strong></div>
+        </section>
+      </div>
+
+      <section id="settings" class="surface settings-surface">
+        <div class="section-heading"><div><p class="eyebrow">Performance</p><h3>Workspace profile</h3></div></div>
+        <div class="profile-row"><div><strong>Low-end mode</strong><p>Reduce transparency and motion for a cooler, quieter desktop.</p></div><label class="switch"><input id="low-end-toggle" type="checkbox"><span></span></label></div>
+        <div class="profile-row"><div><strong>Network</strong><p id="network-detail">Unavailable</p></div><span class="network-state" id="network-state">--</span></div>
+      </section>
+      <footer><span>Promethean Control Center</span><span id="updated-at">Last updated: unavailable</span></footer>
+    </main>
+  </div>
+  <script type="module" src="/control-center/app.js"></script>
+</body>
+</html>

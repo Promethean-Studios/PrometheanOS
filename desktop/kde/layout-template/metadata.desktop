@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Promethean Desktop
+Comment=Promethean top panel and centered task launcher
+Type=Service
+X-KDE-ServiceTypes=Plasma/LayoutTemplate
+X-KDE-PluginInfo-Author=PrometheanOS
+X-KDE-PluginInfo-Name=promethean
+X-KDE-PluginInfo-Version=1.0
