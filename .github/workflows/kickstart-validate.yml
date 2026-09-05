@@ -1,0 +1,36 @@
+name: Kickstart Validation
+
+on:
+  push:
+    paths:
+      - 'kickstarts/**'
+      - '.github/workflows/kickstart-validate.yml'
+  pull_request:
+    paths:
+      - 'kickstarts/**'
+      - '.github/workflows/kickstart-validate.yml'
+
+jobs:
+  validate-kickstarts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Install ksvalidator
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-pip
+          python3 -m pip install --upgrade pip
+          python3 -m pip install ksvalidator
+
+      - name: Validate Kickstart files
+        run: |
+          if find kickstarts -name '*.ks' -print -quit | grep -q .; then
+            for ks in kickstarts/*.ks; do
+              echo "Validating $ks"
+              ksvalidator "$ks"
+            done
+          else
+            echo "No Kickstart files found."
+          fi

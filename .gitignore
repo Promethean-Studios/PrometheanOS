@@ -1,0 +1,31 @@
+# Build artifacts
+*.o
+*.obj
+*.a
+*.so
+*.dll
+*.dylib
+*.exe
+*.bin
+*.elf
+*.img
+*.iso
+
+# Compiled output
+/build/
+/dist/
+/out/
+/target/
+
+# Editor / OS noise
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.vscode/
+.idea/
+
+# Logs and temp files
+*.log
+*.tmp
+*~

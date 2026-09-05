@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<service>
+  <short>Promethean Local AI</short>
+  <description>Local-only access for AI inference endpoints and control services.</description>
+  <port protocol="tcp" port="11434"/>
+  <port protocol="tcp" port="8000"/>
+  <port protocol="tcp" port="3000"/>
+  <port protocol="tcp" port="8188"/>
+</service>
