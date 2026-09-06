@@ -131,13 +131,39 @@ Use QEMU/KVM to validate the live image before approaching physical hardware.
 ./scripts/qemu-smoke-test.sh ./build/output/PrometheanOS-KDE.iso
 ```
 
+The repository's smoke test is the reproducible validation path for the live ISO. It uses a UEFI-enabled x86_64 VM and intentionally does not write to host disks.
+
 For an interactive desktop test, omit `-display none` in the script or run:
 
 ```bash
-qemu-system-x86_64 -machine q35,accel=kvm:tcg -m 4G -smp 2 \
+qemu-system-x86_64 \
+  -machine q35,accel=tcg \
+  -cpu max \
+  -m 4096 \
+  -smp 2 \
   -bios /usr/share/edk2/ovmf/OVMF_CODE.fd \
-  -cdrom ./build/output/PrometheanOS-KDE.iso -vga virtio -nic user,model=virtio
+  -cdrom ./build/output/PrometheanOS-KDE.iso \
+  -vga virtio \
+  -nic user,model=virtio \
+  -display gtk
 ```
+
+### Alpha 0.1 validation milestone
+
+This repository aims to support a first bootable Fedora KDE live image for QEMU testing. The expected flow is:
+
+1. build the ISO with `./build.sh`
+2. confirm `build/output/PrometheanOS-KDE.iso` exists
+3. run `./scripts/qemu-smoke-test.sh ./build/output/PrometheanOS-KDE.iso`
+4. verify the live environment reaches the Fedora KDE desktop and systemd is healthy
+5. check Promethean services and telemetry endpoints from the running system
+
+Known limitations for the current Alpha 0.1 milestone:
+
+- this is a Fedora KDE live image, not a full installed OS deployment yet
+- GPU/CUDA runtime is optional and should degrade gracefully on CPU-only or VM hardware
+- QEMU tests are smoke-level validation, not a full hardware certification pass
+- local AI features are gated by runtime availability and are not expected to be fully operational without a model or GPU
 
 ### KVM recommendations
 

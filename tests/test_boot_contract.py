@@ -9,7 +9,7 @@ def test_live_build_contract_is_self_contained():
     live = (ROOT / "kickstarts/promethean-live.ks").read_text(encoding="utf-8")
 
     assert "promethean-live.ks" in build
-    assert "--make=live" in build
+    assert "--make-iso" in build
     directives = {line.split(maxsplit=1)[0] for line in live.splitlines() if line and not line.startswith("#")}
     assert "clearpart" not in directives
     assert "autopart" not in directives

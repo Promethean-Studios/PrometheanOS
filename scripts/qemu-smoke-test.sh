@@ -5,6 +5,7 @@ ISO="${1:-$(pwd)/build/output/PrometheanOS-KDE.iso}"
 RAM_MB="${RAM_MB:-4096}"
 CPUS="${CPUS:-2}"
 BOOT_SECONDS="${BOOT_SECONDS:-90}"
+SERIAL_LOG="${SERIAL_LOG:-$(pwd)/build/qemu-serial.log}"
 
 if [[ ! -f "$ISO" ]]; then
   echo "ISO not found: $ISO" >&2
@@ -27,9 +28,12 @@ if [[ -z "$OVMF_CODE" ]]; then
   exit 1
 fi
 
+mkdir -p "$(dirname "$SERIAL_LOG")"
+: > "$SERIAL_LOG"
+
 echo "Starting ${BOOT_SECONDS}s headless UEFI smoke test for $ISO"
 timeout --foreground "${BOOT_SECONDS}s" qemu-system-x86_64 \
-  -machine q35,accel=kvm:tcg \
+  -machine q35,accel=tcg \
   -cpu max \
   -m "$RAM_MB" \
   -smp "$CPUS" \
@@ -37,10 +41,16 @@ timeout --foreground "${BOOT_SECONDS}s" qemu-system-x86_64 \
   -cdrom "$ISO" \
   -boot d \
   -display none \
-  -serial stdio \
+  -vga virtio \
+  -serial file:"$SERIAL_LOG" \
   -nic user,model=virtio \
   -no-reboot \
   -monitor none
+
+if [[ -f "$SERIAL_LOG" ]]; then
+  echo '--- QEMU serial log ---'
+  tail -80 "$SERIAL_LOG"
+fi
 
 status=$?
 if [[ $status -eq 124 ]]; then
