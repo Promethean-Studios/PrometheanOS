@@ -1,0 +1,38 @@
+name: Build PrometheanOS ISO
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-iso:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Install Podman and build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            fuse-overlayfs \
+            podman \
+            slirp4netns \
+            uidmap
+
+      - name: Build ISO
+        run: ./build.sh
+
+      - name: Verify ISO output
+        run: |
+          if [[ ! -f build/output/PrometheanOS-KDE.iso ]]; then
+            echo "ISO was not produced at build/output/PrometheanOS-KDE.iso" >&2
+            exit 1
+          fi
+
+      - name: Upload ISO artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PrometheanOS-KDE-ISO
+          path: build/output/PrometheanOS-KDE.iso
+          if-no-files-found: error

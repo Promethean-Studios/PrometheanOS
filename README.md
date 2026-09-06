@@ -121,6 +121,14 @@ It configures:
 - Python backend and Promethean Control Center
 - default local AI cache locations
 
+## Cloud ISO Build
+
+To build the ISO on an Ubuntu GitHub-hosted runner, open the repository's
+**Actions** tab, select **Build PrometheanOS ISO**, choose **Run workflow**, and
+start the workflow. When it completes, open the workflow run and download the
+`PrometheanOS-KDE-ISO` artifact. It contains
+`build/output/PrometheanOS-KDE.iso`.
+
 ## Testing with QEMU / KVM
 
 Use QEMU/KVM to validate the live image before approaching physical hardware.
