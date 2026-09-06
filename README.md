@@ -1,13 +1,13 @@
 # PrometheanOS
 
-PrometheanOS is a Fedora-based Linux desktop environment designed for local AI workloads. It intentionally builds on stable Fedora Workstation components and adds a curated AI-first operating model with hardware-aware configuration, model management, local inference services, and a polished control-center experience.
+PrometheanOS is a Fedora-based Linux desktop environment designed for local AI workloads. It builds on Fedora KDE Plasma and adds hardware-aware diagnostics, model management, local inference services, and a Promethean Control Center.
 
 ## Architecture overview
 
 The system is organized into modular layers:
 
 - Fedora Workstation base
-  - Fedora 40/41 Workstation with standard GNOME/Wayland desktop defaults and systemd support
+  - Fedora KDE Plasma live environment with systemd, NetworkManager, PipeWire, and SDDM
   - DNF/RPM package management, Firewalld, NetworkManager, PipeWire
   - Podman support for containerized AI services
 
@@ -17,7 +17,7 @@ The system is organized into modular layers:
   - local control center and status views
 
 - AI runtime and model layer
-  - CUDA/ROCm detection and setup
+  - hardware-aware CUDA/ROCm availability detection
   - Ollama for local model serving
   - vLLM for OpenAI-compatible local inference
   - Open WebUI and ComfyUI as optional services
@@ -70,6 +70,9 @@ Intel GPUs can provide local media and some compute capabilities, but they are n
 
 PrometheanOS remains usable on CPU-only systems, but AI latency and throughput will be lower. The system should degrade gracefully and warn when heavier model workloads exceed the machine's practical limits.
 
+Optional GPU container services are isolated behind the `gpu` Compose profile;
+the desktop, API, hardware detection, and model inventory do not require a GPU.
+
 ## Repository layout
 
 - `kickstarts/` — Fedora Kickstart files
@@ -87,8 +90,8 @@ PrometheanOS remains usable on CPU-only systems, but AI latency and throughput w
 
 The repository includes a build script for a live ISO image using Podman and Fedora tooling.
 
-1. Ensure Podman is installed.
-2. Ensure you have a Fedora host (or a Fedora-based container environment) with enough disk space.
+1. Ensure Podman is installed and configured for privileged containers.
+2. Ensure the host has enough disk space for Fedora packages and a live ISO.
 3. From the repo root:
 
 ```bash
@@ -96,38 +99,44 @@ chmod +x build.sh
 ./build.sh
 ```
 
-This will build a live image using the Kickstart file in `kickstarts/promethean-base.ks` and write the output to the build directory.
+The builder uses `kickstarts/promethean-live.ks` and writes the ISO to
+`build/output/`. It does not write to host disks. Fedora release and output can
+be overridden, for example:
+
+```bash
+FEDORA_RELEASE=44 OUTPUT_DIR="$PWD/build/output" ./build.sh
+```
 
 ### Kickstart customization
 
 The main installation definition is:
 
-- `kickstarts/promethean-base.ks`
+- `kickstarts/promethean-live.ks`
 
 It configures:
 
-- base Fedora Workstation install
+- Fedora KDE Plasma live environment
 - default non-root user with sudo access
-- RPM Fusion repositories
-- NVIDIA/CUDA repo settings
-- build tools and Python development packages
+- KDE Plasma desktop and system services
+- Python backend and Promethean Control Center
 - default local AI cache locations
 
 ## Testing with QEMU / KVM
 
-Use QEMU/KVM to validate the installation image before approaching physical hardware.
+Use QEMU/KVM to validate the live image before approaching physical hardware.
 
 ### Example QEMU command
 
 ```bash
-qemu-system-x86_64 \
-  -m 8G \
-  -smp 4 \
-  -drive file=./build/output/PrometheanOS-live.iso,format=raw,if=virtio \
-  -vga virtio \
-  -display gtk \
-  -netdev user,id=n1 -device virtio-net-pci,netdev=n1 \
-  -enable-kvm
+./scripts/qemu-smoke-test.sh ./build/output/PrometheanOS-KDE.iso
+```
+
+For an interactive desktop test, omit `-display none` in the script or run:
+
+```bash
+qemu-system-x86_64 -machine q35,accel=kvm:tcg -m 4G -smp 2 \
+  -bios /usr/share/edk2/ovmf/OVMF_CODE.fd \
+  -cdrom ./build/output/PrometheanOS-KDE.iso -vga virtio -nic user,model=virtio
 ```
 
 ### KVM recommendations
@@ -143,6 +152,12 @@ The repository includes GitHub Actions workflows for validation:
 
 - `.github/workflows/lint.yml` runs shellcheck on shell scripts and ruff on Python files
 - `.github/workflows/kickstart-validate.yml` runs `ksvalidator` against Kickstart files
+
+Run the local backend tests with:
+
+```bash
+python3 -m pytest -q
+```
 
 ## Security and operational expectations
 

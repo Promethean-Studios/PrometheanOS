@@ -3,22 +3,24 @@ Description=Promethean Ollama local inference service
 Documentation=https://ollama.com
 After=network-online.target
 Wants=network-online.target
+ConditionPathExists=/usr/bin/ollama
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/ollama serve
-Environment=OLLAMA_HOST=0.0.0.0:11434
-Environment=OLLAMA_ORIGINS=*
+User=promethean
+Group=promethean
+ExecStart=/usr/bin/env ollama serve
+Environment=OLLAMA_HOST=127.0.0.1:11434
+Environment=OLLAMA_ORIGINS=http://127.0.0.1:8765
 Environment=OLLAMA_KEEP_ALIVE=24h
-# GPU acceleration is enabled when the host has NVIDIA or AMD GPU runtime support
-Environment=CUDA_VISIBLE_DEVICES=all
+Environment=OLLAMA_MODELS=/data/models/ollama
 Restart=on-failure
 RestartSec=5
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
-ProtectHome=yes
-ReadWritePaths=/var/lib/ollama /var/log
+ProtectHome=true
+ReadWritePaths=/data/models /var/log
 
 [Install]
 WantedBy=multi-user.target

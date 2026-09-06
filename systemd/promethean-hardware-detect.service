@@ -1,13 +1,19 @@
 [Unit]
-Description=Promethean hardware detection and GPU runtime setup
+Description=Promethean read-only hardware detection
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/bin/promethean-hardware-detect.sh
+User=promethean
+Group=promethean
+ExecStart=/usr/bin/env bash /usr/local/libexec/promethean/hardware-detect.sh
 StandardOutput=journal
 StandardError=journal
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
 RemainAfterExit=yes
 
 [Install]

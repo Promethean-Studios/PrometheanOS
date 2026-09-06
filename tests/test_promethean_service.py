@@ -5,6 +5,7 @@ import pytest
 
 from src.system.api.local_api import LocalPrometheanAPI
 from src.system.hardware.providers import GPUProvider, HardwareProvider
+from src.system.models import ModelManager
 from src.system.services.promethean_service import PrometheanService
 
 
@@ -79,6 +80,36 @@ def test_api_serves_control_center_and_live_telemetry():
     telemetry = json.loads(urllib.request.urlopen("http://127.0.0.1:8768/telemetry", timeout=5).read())
     assert "Promethean Control Center" in html
     assert {"cpu", "memory", "gpu", "storage", "network", "ai"}.issubset(telemetry)
+    api.shutdown()
+    thread.join(timeout=5)
+
+
+def test_empty_model_inventory_is_machine_readable(tmp_path):
+    service = PrometheanService(model_manager=ModelManager([tmp_path], []))
+
+    assert service.get_models() == []
+    result = service.model_manager.launch("missing-model")
+    assert result == {"ok": False, "error": "Model 'missing-model' is not installed."}
+
+
+def test_api_reports_missing_model_launch(tmp_path):
+    service = PrometheanService(model_manager=ModelManager([tmp_path], []))
+    api = LocalPrometheanAPI(service=service, host="127.0.0.1", port=8769)
+    thread = Thread(target=api.serve_forever, daemon=True)
+    thread.start()
+    assert api.wait_until_ready(timeout=5)
+    import urllib.error
+    import urllib.request
+
+    request = urllib.request.Request(
+        "http://127.0.0.1:8769/models/launch",
+        data=b'{"name":"missing-model"}',
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with pytest.raises(urllib.error.HTTPError) as error:
+        urllib.request.urlopen(request, timeout=5)
+    assert json.loads(error.value.read().decode())["error"] == "Model 'missing-model' is not installed."
     api.shutdown()
     thread.join(timeout=5)
 

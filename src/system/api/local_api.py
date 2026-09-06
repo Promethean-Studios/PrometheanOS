@@ -55,12 +55,26 @@ class PrometheanRequestHandler(BaseHTTPRequestHandler):
 
         self.send_error(404, "Not found")
 
+    def do_POST(self):
+        parsed = urlparse(self.path)
+        if parsed.path != "/models/launch":
+            self.send_error(404, "Not found")
+            return
+        length = int(self.headers.get("Content-Length", "0"))
+        try:
+            payload = json.loads(self.rfile.read(length) or b"{}")
+        except (ValueError, UnicodeDecodeError):
+            self.send_error(400, "Request body must be JSON")
+            return
+        result = self.server.service.model_manager.launch(str(payload.get("name", "")))
+        self._send_json(result, status=200 if result.get("ok") else 422)
+
     def log_message(self, format, *args):
         return
 
-    def _send_json(self, payload: Dict[str, Any]):
+    def _send_json(self, payload: Dict[str, Any], status: int = 200):
         body = json.dumps(payload).encode("utf-8")
-        self.send_response(200)
+        self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()

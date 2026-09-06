@@ -13,9 +13,10 @@ Restart=on-failure
 RestartSec=5
 NoNewPrivileges=true
 PrivateTmp=true
-ProtectSystem=read-only
+ProtectSystem=full
 ProtectHome=yes
 ReadWritePaths=/var/log /data/models
+Environment=PYTHONPATH=/srv/promethean
 
 [Install]
 WantedBy=multi-user.target
