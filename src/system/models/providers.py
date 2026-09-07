@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import urllib.parse
+import urllib.request
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
@@ -14,6 +16,9 @@ class ModelProvider(ABC):
     @abstractmethod
     def discover(self, locations: Iterable[Path]) -> List[ModelMetadata]:
         raise NotImplementedError
+
+    def search(self, query: str, limit: int = 20) -> List[ModelMetadata]:
+        return []
 
 
 def _integer(value: Any) -> Optional[int]:
@@ -49,6 +54,36 @@ class FilesystemModelProvider(ModelProvider):
 
 class HuggingFaceProvider(ModelProvider):
     name = "huggingface"
+
+    def search(self, query: str, limit: int = 20) -> List[ModelMetadata]:
+        params = urllib.parse.urlencode({"search": query, "limit": max(1, min(limit, 100)), "full": "true"})
+        request = urllib.request.Request(f"https://huggingface.co/api/models?{params}", headers={"User-Agent": "PrometheanOS/0.1", "Accept": "application/json"})
+        try:
+            with urllib.request.urlopen(request, timeout=10) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except (OSError, ValueError, UnicodeDecodeError):
+            return []
+        if not isinstance(payload, list):
+            return []
+        return [self._remote_metadata(item) for item in payload if isinstance(item, dict) and item.get("id")]
+
+    @staticmethod
+    def _remote_metadata(data: Dict[str, Any]) -> ModelMetadata:
+        files = []
+        for sibling in data.get("siblings", []):
+            if not isinstance(sibling, dict) or not sibling.get("rfilename"):
+                continue
+            files.append({"filename": sibling["rfilename"], "size_bytes": _integer(sibling.get("size"))})
+        tags = data.get("tags") if isinstance(data.get("tags"), list) else []
+        quantization = next((tag for tag in tags if any(token in str(tag).lower() for token in ("q4", "q5", "q8", "int8", "4bit", "8bit"))), None)
+        return ModelMetadata(
+            name=data.get("id"), author=data.get("author"), provider="huggingface", repository_id=data.get("id"),
+            description=data.get("description") if isinstance(data.get("description"), str) else None,
+            parameter_count=_integer(data.get("numParameters") or data.get("parameter_count")),
+            quantization=quantization, model_format="huggingface", files=files,
+            download_size_bytes=sum(item["size_bytes"] for item in files if isinstance(item.get("size_bytes"), int)) or None,
+            runtime_compatibility=["transformers"],
+        )
 
     def discover(self, locations: Iterable[Path]) -> List[ModelMetadata]:
         models: List[ModelMetadata] = []

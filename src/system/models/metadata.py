@@ -20,6 +20,9 @@ class ModelMetadata:
     download_size_bytes: Optional[int] = None
     local_path: Optional[str] = None
     runtime_compatibility: Optional[List[str]] = None
+    description: Optional[str] = None
+    repository_id: Optional[str] = None
+    files: Optional[List[Dict[str, Any]]] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)

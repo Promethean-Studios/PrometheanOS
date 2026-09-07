@@ -6,6 +6,7 @@ from typing import Any, Dict, List
 from src.system.hardware.capabilities import CapabilityEngine
 from src.system.models import ModelManager, ModelMetadata
 from src.system.security import PermissionBroker
+from src.system.setup import SetupState
 from src.system.telemetry import AIWorkloadDetector, SystemTelemetryCollector
 
 
@@ -18,10 +19,20 @@ class PrometheanService:
         self.capability_engine = CapabilityEngine()
         self.telemetry = telemetry or SystemTelemetryCollector(poll_interval=poll_interval, capability_engine=self.capability_engine)
         self.model_manager = model_manager or ModelManager()
+        self.setup = SetupState(telemetry=self.telemetry)
         self.permission_broker = permission_broker or PermissionBroker()
 
     def get_models(self) -> List[Dict[str, Any]]:
-        return [model.to_dict() for model in self.model_manager.discover()]
+        return self.model_manager.installed()
+
+    def search_models(self, query: str, limit: int = 20) -> List[Dict[str, Any]]:
+        return self.model_manager.search(query, limit)
+
+    def get_setup(self) -> Dict[str, Any]:
+        return self.setup.snapshot()
+
+    def update_setup(self, values: Dict[str, Any], complete: bool = False) -> Dict[str, Any]:
+        return self.setup.complete(values) if complete else self.setup.update(values)
 
     def recommend_model(self, model: ModelMetadata, profile: str = "balanced") -> Dict[str, Any]:
         snapshot = self.snapshot()

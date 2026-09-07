@@ -9,7 +9,7 @@ from typing import Any, Callable, Dict, Iterable, Optional
 import psutil
 
 from src.system.hardware.capabilities import CapabilityEngine
-from src.system.hardware.providers import CPUProvider, GPUProvider, MemoryProvider, NetworkProvider, StorageProvider
+from src.system.hardware.providers import CPUProvider, GPUProvider, MemoryProvider, NetworkProvider, PowerProvider, StorageProvider, SystemProvider
 
 
 UNAVAILABLE = None
@@ -97,6 +97,7 @@ class SystemTelemetryCollector:
         self._cached: Optional[Dict[str, Any]] = None
         self._polled_at = 0.0
         self._lock = threading.Lock()
+        self._network_previous: Optional[Dict[str, Any]] = None
 
     def snapshot(self, force: bool = False) -> Dict[str, Any]:
         with self._lock:
@@ -112,11 +113,14 @@ class SystemTelemetryCollector:
                 "memory": MemoryProvider.detect,
                 "storage": StorageProvider.detect,
                 "network": NetworkProvider.detect,
+                "power": PowerProvider.detect,
+                "system": SystemProvider.detect,
             }
             for name, provider in providers.items():
                 sections[name], error = _safe_call(name, provider)
                 if error:
                     errors[name] = error
+            self._add_network_rates(sections.get("network", {}), now)
 
             ai, ai_error = _safe_call("ai", self._ai_snapshot)
             if ai_error:
@@ -136,6 +140,25 @@ class SystemTelemetryCollector:
             self._cached = snapshot
             self._polled_at = now
             return snapshot
+
+    def _add_network_rates(self, network: Dict[str, Any], polled_at: float) -> None:
+        current = network.get("interfaces", {})
+        previous = self._network_previous
+        elapsed = polled_at - self._polled_at if previous is not None else 0
+        for name, interface in current.items():
+            old = previous.get(name, {}) if previous else {}
+            interface["upload_bytes_per_second"] = self._rate(interface.get("upload_bytes"), old.get("upload_bytes"), elapsed)
+            interface["download_bytes_per_second"] = self._rate(interface.get("download_bytes"), old.get("download_bytes"), elapsed)
+        self._network_previous = {
+            name: {"upload_bytes": item.get("upload_bytes"), "download_bytes": item.get("download_bytes")}
+            for name, item in current.items()
+        }
+
+    @staticmethod
+    def _rate(current: Any, previous: Any, elapsed: float) -> Optional[float]:
+        if elapsed <= 0 or not isinstance(current, (int, float)) or not isinstance(previous, (int, float)):
+            return None
+        return round(max(0, current - previous) / elapsed, 1)
 
     def _ai_snapshot(self) -> Dict[str, Any]:
         runtimes = self.capability_engine.detect_runtimes()

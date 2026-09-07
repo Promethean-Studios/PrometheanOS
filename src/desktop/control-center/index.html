@@ -14,6 +14,7 @@
       <nav>
         <a class="nav-item active" href="#overview"><span class="nav-icon">◈</span>Overview</a>
         <a class="nav-item" href="#workloads"><span class="nav-icon">⌁</span>AI workloads</a>
+        <a class="nav-item" href="#models"><span class="nav-icon">⬡</span>Models</a>
         <a class="nav-item" href="#storage"><span class="nav-icon">▤</span>Storage</a>
         <a class="nav-item" href="#settings"><span class="nav-icon">◌</span>Settings</a>
       </nav>
@@ -45,10 +46,20 @@
       </section>
 
       <section class="metrics-grid" aria-label="Hardware overview">
-        <article class="metric-card metric-wide"><div class="card-heading"><span>CPU</span><span class="metric-status" id="cpu-status">●</span></div><strong id="cpu-value">Unavailable</strong><p id="cpu-detail">Waiting for telemetry</p><div class="meter"><span id="cpu-meter"></span></div></article>
-        <article class="metric-card"><div class="card-heading"><span>RAM</span><span class="card-glyph">RAM</span></div><strong id="ram-value">Unavailable</strong><p id="ram-detail">Waiting for telemetry</p><div class="meter"><span id="ram-meter"></span></div></article>
+        <article class="metric-card metric-wide"><div class="card-heading"><span>CPU</span><span id="cpu-temperature" class="metric-status">Unavailable</span></div><strong id="cpu-value">Unavailable</strong><p id="cpu-detail">Waiting for telemetry</p><div class="meter"><span id="cpu-meter"></span></div></article>
+        <article class="metric-card"><div class="card-heading"><span>Memory</span><span class="card-glyph">RAM</span></div><strong id="ram-value">Unavailable</strong><p id="ram-detail">Waiting for telemetry</p><small id="ram-free" class="muted-value">Unavailable</small><div class="meter"><span id="ram-meter"></span></div></article>
         <article class="metric-card"><div class="card-heading"><span>GPU</span><span class="card-glyph">GPU</span></div><strong id="gpu-value">Unavailable</strong><p id="gpu-detail">Waiting for telemetry</p></article>
         <article class="metric-card"><div class="card-heading"><span>VRAM</span><span class="card-glyph">VRAM</span></div><strong id="vram-value">Unavailable</strong><p id="vram-detail">Waiting for telemetry</p><div class="meter"><span id="vram-meter"></span></div></article>
+      </section>
+
+      <section id="models" class="surface models-surface">
+        <div class="section-heading"><div><p class="eyebrow">Model manager</p><h3>Discover and manage models</h3></div><span id="model-space" class="muted-value">Disk space unavailable</span></div>
+        <form id="model-search-form" class="model-search"><input id="model-search-input" type="search" placeholder="Search Hugging Face models" aria-label="Search Hugging Face models"><button type="submit">Search</button></form>
+        <p id="model-status" class="muted-value">Search Hugging Face for real model metadata.</p>
+        <div id="model-results" class="model-list"></div>
+        <div class="model-subheading"><h4>Installed models</h4><button id="installed-refresh" class="text-button" type="button">Refresh</button></div>
+        <div id="installed-models" class="model-list"><div class="empty-state">No installed model files found.</div></div>
+        <div id="download-list" class="model-list"></div>
       </section>
 
       <div class="section-grid">
@@ -61,7 +72,13 @@
           <div class="storage-ring" id="storage-ring"><div><strong id="storage-percent">--</strong><small>used</small></div></div>
           <div class="storage-meta"><span><i class="legend model"></i>Model storage</span><strong id="storage-models">Unavailable</strong></div>
           <div class="storage-meta"><span><i class="legend free"></i>Available</span><strong id="storage-free">Unavailable</strong></div>
+          <div id="disk-list" class="data-list"></div>
         </section>
+      </div>
+
+      <div class="section-grid detail-grid">
+        <section class="surface"><div class="section-heading"><div><p class="eyebrow">Interfaces</p><h3>Network</h3></div><span class="section-icon">⇅</span></div><div id="interface-list" class="data-list"><div class="empty-state">Waiting for telemetry</div></div></section>
+        <section class="surface"><div class="section-heading"><div><p class="eyebrow">Power and time</p><h3>System</h3></div></div><div class="system-stats"><div><small>Uptime</small><strong id="uptime">Unavailable</strong></div><div><small>Battery</small><strong id="power-value">Unavailable</strong><span id="power-detail">Battery unavailable</span></div></div></section>
       </div>
 
       <section id="settings" class="surface settings-surface">

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=PrometheanOS First-Run Setup
+Comment=Configure PrometheanOS for the first time
+Exec=/usr/local/libexec/promethean/first-run.sh
+Icon=preferences-system
+Terminal=false
+OnlyShowIn=KDE;
+X-KDE-autostart-after=panel

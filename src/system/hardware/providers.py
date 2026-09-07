@@ -5,6 +5,7 @@ import platform
 import re
 import shutil
 import subprocess
+import time
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -81,19 +82,20 @@ class GPUProvider(HardwareProvider):
         result = _run(["nvidia-smi", "--query-gpu=name,memory.total,memory.used,utilization.gpu,temperature.gpu,clocks.gr,power.draw,driver_version", "--format=csv,noheader,nounits"])
         if result is None or result.returncode != 0:
             return {"vendor": "nvidia", "status": "installed_but_broken", "runtime": {"cuda": "installed_but_broken"}}
-        fields = [item.strip() for item in _first_line(result.stdout).split(",")]
-        if len(fields) < 8:
+        rows = [[item.strip() for item in line.split(",")] for line in result.stdout.splitlines() if line.strip()]
+        if not rows or any(len(fields) < 8 for fields in rows):
             return {"vendor": "nvidia", "status": "installed_but_broken", "runtime": {"cuda": "installed_but_broken"}}
 
         def number(value: str) -> Optional[float]:
             return float(value) if value not in {"N/A", "[Not Supported]"} else None
 
-        return {
+        gpus = [{
             "vendor": "nvidia", "status": "available", "name": fields[0], "model": fields[0],
             "vram_mb": number(fields[1]), "vram_used_mb": number(fields[2]), "utilization_percent": number(fields[3]),
             "temperature_c": number(fields[4]), "clock_mhz": number(fields[5]), "power_w": number(fields[6]),
             "driver": fields[7], "runtime": {"cuda": "available"}, "family": "cuda-capable",
-        }
+        } for fields in rows]
+        return {**gpus[0], "gpus": gpus}
 
     @staticmethod
     def _pci_gpu() -> Optional[Dict[str, Any]]:
@@ -104,17 +106,19 @@ class GPUProvider(HardwareProvider):
         gpu_lines = [line for line in output.splitlines() if re.search(r"(vga|3d controller|display controller)", line, re.I)]
         if not gpu_lines:
             return None
-        line = gpu_lines[0]
-        lower = line.lower()
-        vendor, family = "unknown", "unsupported"
-        if "amd" in lower or "radeon" in lower:
-            vendor, family = "amd", "rocm-capable"
-        elif "intel" in lower:
-            vendor, family = "intel", "integrated"
-        elif "nvidia" in lower:
-            vendor, family = "nvidia", "cuda-capable"
-        name = line.split(": ", 1)[-1]
-        return {"vendor": vendor, "status": "available" if vendor != "unknown" else "unsupported", "name": name, "model": name, "family": family, "runtime": {}, "utilization_percent": None, "temperature_c": None, "clock_mhz": None, "power_w": None, "vram_mb": None, "vram_used_mb": None}
+        gpus = []
+        for line in gpu_lines:
+            lower = line.lower()
+            vendor, family = "unknown", "unsupported"
+            if "amd" in lower or "radeon" in lower:
+                vendor, family = "amd", "rocm-capable"
+            elif "intel" in lower:
+                vendor, family = "intel", "integrated"
+            elif "nvidia" in lower:
+                vendor, family = "nvidia", "cuda-capable"
+            name = line.split(": ", 1)[-1]
+            gpus.append({"vendor": vendor, "status": "available" if vendor != "unknown" else "unsupported", "name": name, "model": name, "family": family, "runtime": {}, "utilization_percent": None, "temperature_c": None, "clock_mhz": None, "power_w": None, "vram_mb": None, "vram_used_mb": None})
+        return {**gpus[0], "gpus": gpus}
 
     @staticmethod
     def detect() -> Dict[str, Any]:
@@ -124,7 +128,7 @@ class GPUProvider(HardwareProvider):
         pci = GPUProvider._pci_gpu()
         if pci:
             return pci
-        return {"vendor": "none", "status": "unsupported", "name": "no-gpu", "model": None, "family": "cpu-only", "runtime": {}, "utilization_percent": None, "temperature_c": None, "clock_mhz": None, "power_w": None, "vram_mb": None, "vram_used_mb": None}
+        return {"vendor": "none", "status": "unsupported", "name": "no-gpu", "model": None, "family": "cpu-only", "runtime": {}, "gpus": [], "utilization_percent": None, "temperature_c": None, "clock_mhz": None, "power_w": None, "vram_mb": None, "vram_used_mb": None}
 
 
 class StorageProvider(HardwareProvider):
@@ -182,6 +186,34 @@ class NetworkProvider(HardwareProvider):
             counter = counters.get(key)
             interfaces[key] = {"addresses": [addr.address for addr in values], "active": bool(counter and (counter.bytes_sent or counter.bytes_recv)), "upload_bytes": counter.bytes_sent if counter else None, "download_bytes": counter.bytes_recv if counter else None}
         return {"interfaces": interfaces, "active_interfaces": [key for key, item in interfaces.items() if item["active"]]}
+
+
+class SystemProvider(HardwareProvider):
+    @staticmethod
+    def detect() -> Dict[str, Any]:
+        try:
+            boot_time = psutil.boot_time()
+            uptime_seconds = max(0, round(time.time() - boot_time, 1))
+        except (AttributeError, OSError):
+            return {"uptime_seconds": None}
+        return {"uptime_seconds": uptime_seconds, "boot_time": boot_time}
+
+
+class PowerProvider(HardwareProvider):
+    @staticmethod
+    def detect() -> Dict[str, Any]:
+        try:
+            battery = psutil.sensors_battery()
+        except (AttributeError, OSError):
+            battery = None
+        if battery is None:
+            return {"available": False, "percent": None, "plugged_in": None, "seconds_left": None}
+        return {
+            "available": True,
+            "percent": round(battery.percent, 1) if battery.percent is not None else None,
+            "plugged_in": battery.power_plugged,
+            "seconds_left": battery.secsleft if battery.secsleft >= 0 else None,
+        }
 
 
 class MemoryProvider(HardwareProvider):

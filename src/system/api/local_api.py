@@ -12,6 +12,7 @@ from src.system.services.promethean_service import PrometheanService
 
 
 CONTROL_CENTER_ROOT = Path(__file__).resolve().parents[2] / "desktop" / "control-center"
+SETUP_ROOT = Path(__file__).resolve().parents[2] / "desktop" / "setup"
 
 
 class PrometheanRequestHandler(BaseHTTPRequestHandler):
@@ -35,12 +36,28 @@ class PrometheanRequestHandler(BaseHTTPRequestHandler):
             return
 
         parsed = urlparse(self.path)
+        if parsed.path == "/setup" or parsed.path.startswith("/setup/"):
+            if parsed.path == "/setup/state":
+                self._send_json(self.server.service.get_setup())
+            else:
+                self._send_static(SETUP_ROOT, parsed.path, "/setup")
+            return
         if parsed.path == "/control-center" or parsed.path.startswith("/control-center/"):
-            self._send_control_center(parsed.path)
+            self._send_static(CONTROL_CENTER_ROOT, parsed.path, "/control-center")
             return
 
         if parsed.path == "/models":
-            self._send_json({"models": self.server.service.get_models()})
+            query = parse_qs(parsed.query)
+            if query.get("search", [""])[0]:
+                self._send_json({"models": self.server.service.search_models(query["search"][0], int(query.get("limit", [20])[0]))})
+            else:
+                self._send_json({"models": self.server.service.get_models()})
+            return
+
+        if parsed.path.startswith("/models/download/"):
+            job_id = unquote(parsed.path.removeprefix("/models/download/"))
+            result = self.server.service.model_manager.download_status(job_id)
+            self._send_json(result or {"error": "Download job not found"}, status=200 if result else 404)
             return
 
         if parsed.path == "/models/recommend":
@@ -57,7 +74,17 @@ class PrometheanRequestHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urlparse(self.path)
-        if parsed.path != "/models/launch":
+        if parsed.path == "/setup/state" or parsed.path == "/setup/complete":
+            length = int(self.headers.get("Content-Length", "0"))
+            try:
+                payload = json.loads(self.rfile.read(length) or b"{}")
+            except (ValueError, UnicodeDecodeError):
+                self.send_error(400, "Request body must be JSON")
+                return
+            result = self.server.service.update_setup(payload, parsed.path == "/setup/complete")
+            self._send_json(result)
+            return
+        if parsed.path not in {"/models/launch", "/models/download", "/models/download/cancel"}:
             self.send_error(404, "Not found")
             return
         length = int(self.headers.get("Content-Length", "0"))
@@ -66,8 +93,26 @@ class PrometheanRequestHandler(BaseHTTPRequestHandler):
         except (ValueError, UnicodeDecodeError):
             self.send_error(400, "Request body must be JSON")
             return
-        result = self.server.service.model_manager.launch(str(payload.get("name", "")))
-        self._send_json(result, status=200 if result.get("ok") else 422)
+        if parsed.path == "/models/launch":
+            result = self.server.service.model_manager.launch(str(payload.get("name", "")))
+        elif parsed.path == "/models/download/cancel":
+            result = self.server.service.model_manager.cancel_download(str(payload.get("job_id", ""))) or {"error": "Download job not found"}
+        else:
+            try:
+                expected_size = int(payload["size_bytes"]) if payload.get("size_bytes") is not None else None
+                result = self.server.service.model_manager.download(str(payload.get("repository_id", "")), str(payload.get("filename", "")), expected_size)
+            except (TypeError, ValueError):
+                result = {"status": "rejected", "error": "size_bytes must be an integer"}
+        successful = result.get("ok") or (result.get("status") not in {"rejected", None} and "error" not in result)
+        self._send_json(result, status=200 if successful else 422)
+
+    def do_DELETE(self):
+        if not self.path.startswith("/models/installed"):
+            self.send_error(404, "Not found")
+            return
+        path = parse_qs(urlparse(self.path).query).get("path", [""])[0]
+        result = self.server.service.model_manager.delete_installed(path)
+        self._send_json(result, status=200 if result.get("ok") else 404)
 
     def log_message(self, format, *args):
         return
@@ -80,11 +125,11 @@ class PrometheanRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def _send_control_center(self, request_path: str):
-        relative = request_path.removeprefix("/control-center/") if request_path != "/control-center" else "index.html"
-        candidate = (CONTROL_CENTER_ROOT / unquote(relative)).resolve()
+    def _send_static(self, root: Path, request_path: str, prefix: str):
+        relative = request_path.removeprefix(f"{prefix}/") if request_path != prefix else "index.html"
+        candidate = (root / unquote(relative)).resolve()
         try:
-            candidate.relative_to(CONTROL_CENTER_ROOT.resolve())
+            candidate.relative_to(root.resolve())
         except ValueError:
             self.send_error(404, "Not found")
             return

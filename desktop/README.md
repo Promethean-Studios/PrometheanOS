@@ -18,6 +18,13 @@ because Plasma layout templates can replace a user's existing panel placement:
 PROMETHEAN_APPLY_LAYOUT=1 ./desktop/kde/apply-promethean.sh
 ```
 
+The Promethean visual layer keeps Plasma and Breeze underneath while applying
+the Promethean color scheme, wallpaper, Breeze-compatible window decoration,
+dark icons, and a restrained top-panel and centered-dock hierarchy. The web
+Control Center and first-run setup share the same type pairing, lime signal
+color, cool blue secondary signal, keyboard focus states, and reduced-motion
+behavior. The low-end profile disables compositor and animation effects.
+
 Enable the conservative profile on lower-end hardware:
 
 ```bash

@@ -49,10 +49,12 @@ rm -rf /mnt/sysimage/srv/promethean/.git /mnt/sysimage/srv/promethean/.pytest_ca
 %post --log=/root/promethean-post.log --erroronfail
 set -eu
 install -d -m 0775 -o promethean -g promethean /data/models /data/models/ollama /data/models/huggingface /data/models/cache
-install -d -m 0755 /usr/local/libexec/promethean /usr/share/promethean/desktop
+install -d -m 0755 /usr/local/libexec/promethean /usr/share/promethean/desktop /etc/xdg/autostart
 install -m 0755 /srv/promethean/promethean-hardware-detect.sh /usr/local/libexec/promethean/hardware-detect.sh
+install -m 0755 /srv/promethean/scripts/promethean-first-run.sh /usr/local/libexec/promethean/first-run.sh
 cp -a /srv/promethean/desktop/. /usr/share/promethean/desktop/
 install -m 0644 /srv/promethean/desktop/kde/promethean-control-center.desktop /usr/share/applications/promethean-control-center.desktop
+install -m 0644 /srv/promethean/desktop/kde/promethean-first-run.desktop /etc/xdg/autostart/promethean-first-run.desktop
 install -d -m 0755 /etc/systemd/system
 install -m 0644 /srv/promethean/systemd/promethean-api.service /etc/systemd/system/promethean-api.service
 install -m 0644 /srv/promethean/systemd/promethean-hardware-detect.service /etc/systemd/system/promethean-hardware-detect.service

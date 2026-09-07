@@ -15,6 +15,12 @@ cp "$ROOT/desktop/kde/layout-template/contents/layout.js" "$DATA_HOME/plasma/lay
 if command -v kwriteconfig6 >/dev/null 2>&1; then
   kwriteconfig6 --file "$CONFIG_HOME/kdeglobals" --group KDE --key ColorScheme Promethean
   kwriteconfig6 --file "$CONFIG_HOME/kdeglobals" --group KDE --key LookAndFeelPackage org.kde.breeze.desktop
+  kwriteconfig6 --file "$CONFIG_HOME/kdeglobals" --group Icons --key Theme breeze-dark
+  kwriteconfig6 --file "$CONFIG_HOME/kdeglobals" --group General --key widgetStyle Breeze
+  kwriteconfig6 --file "$CONFIG_HOME/kdeglobals" --group WM --key activeBackground 25,35,31
+  kwriteconfig6 --file "$CONFIG_HOME/kdeglobals" --group WM --key inactiveBackground 24,30,29
+  kwriteconfig6 --file "$CONFIG_HOME/kwinrc" --group org.kde.kdecoration2 --key library org.kde.breeze
+  kwriteconfig6 --file "$CONFIG_HOME/kwinrc" --group org.kde.kdecoration2 --key theme Breeze
   kwriteconfig6 --file "$CONFIG_HOME/kwinrc" --group Compositing --key Enabled true
   kwriteconfig6 --file "$CONFIG_HOME/kwinrc" --group Compositing --key AnimationSpeed 1
   kwriteconfig6 --file "$CONFIG_HOME/plasmarc" --group Theme --key name default
