@@ -76,21 +76,36 @@ livemedia-creator \
   --releasever="$FEDORA_RELEASE" || lmc_rc=$?
 if [[ $lmc_rc -ne 0 ]]; then
   # On failure anaconda prints only a generic message to stdout; the
-  # per-package/scriptlet error detail exists ONLY in log files
-  # (/var/log/anaconda/, the logs lmc's --remotelog server collects under
-  # /tmp, and lmc's own log). This container runs with --rm, so copy every
-  # log to the mounted temp result root before exiting or they are lost
-  # with it (CI run 34399471667 was undiagnosable).
+  # per-package/scriptlet error detail exists ONLY in log files (somewhere
+  # under /var/log, /tmp or /workspace - run 34399471667 + 34402353556 were
+  # undiagnosable). This container runs with --rm, so capture before exit:
+  # 1. inventory of every log-ish file (printed to stdout - the CI console
+  #    log is the one channel proven to survive);
+  # 2. a tar of the known log locations, with tar's complaints captured
+  #    instead of silenced so a wrong path is visible;
+  # 3. tails of every inventory hit straight to stdout, bounded per file.
   dest=/tmp/live-root/build-logs
-  mkdir -p "$dest/anaconda" "$dest/lmc" "$dest/result"
-  cp -a /var/log/anaconda/. "$dest/anaconda/" 2>/dev/null || true
-  cp -a /tmp/lmc-logs/. "$dest/lmc/" 2>/dev/null || true
-  for f in /tmp/anaconda.log /tmp/packaging.log /tmp/program.log \
-           /tmp/storage.log /tmp/syslog /tmp/livemedia-creator.log \
-           /workspace/livemedia-creator.log; do
-    cp -a "$f" "$dest/lmc/" 2>/dev/null || true
+  mkdir -p "$dest"
+  find /var/log /tmp /root /workspace -maxdepth 3 -type f \
+       \( -name '*.log' -o -name '*anaconda*' -o -name 'lmc*' \
+          -o -name 'syslog' -o -name 'journal*' -o -name 'dnf*' \) \
+       -printf '%s\t%p\n' 2>/dev/null | sort -rn > "$dest/inventory.txt" || true
+  echo "==== build log inventory (bytes, path) ===="
+  cat "$dest/inventory.txt" || true
+  tar -C / -cf "$dest/logs.tar" \
+      var/log/anaconda \
+      tmp/lmc-logs tmp/anaconda.log tmp/packaging.log tmp/program.log \
+      tmp/storage.log tmp/syslog tmp/livemedia-creator.log \
+      workspace/livemedia-creator.log \
+      >"$dest/tar-errors.txt" 2>&1 || true
+  echo "==== tar capture errors (missing members are expected) ====" >&2
+  cat "$dest/tar-errors.txt" >&2 || true
+  awk '{print $2}' "$dest/inventory.txt" 2>/dev/null | while IFS= read -r f; do
+    case "$f" in "$dest"/*|*build-lmc.log|*.tar) continue;; esac
+    echo "===== tail of $f ====="
+    tail -c 200000 "$f" 2>/dev/null
+    echo
   done
-  cp -a /tmp/live-root/result/. "$dest/result/" 2>/dev/null || true
   echo "livemedia-creator failed (rc=$lmc_rc); logs preserved in $dest" >&2
   exit "$lmc_rc"
 fi
@@ -115,6 +130,8 @@ if [[ $podman_rc -ne 0 ]]; then
   # root-owned by the rootful container, so the copy needs the same sudo
   # fallback as the cleanup trap.
   mkdir -p "$OUTPUT_DIR/build-logs"
+  "${RUN_AS_ROOT[@]}" tar -xf "$TEMP_RESULT_ROOT/build-logs/logs.tar" -C "$OUTPUT_DIR/build-logs/" 2>/dev/null \
+    || echo "warning: no logs.tar to extract (see tar-errors.txt / inventory in the console log)" >&2
   "${RUN_AS_ROOT[@]}" cp -a "$TEMP_RESULT_ROOT/build-logs/." "$OUTPUT_DIR/build-logs/" \
     || echo "warning: could not copy build logs out of $TEMP_RESULT_ROOT/build-logs" >&2
   "${RUN_AS_ROOT[@]}" chmod -R a+rX "$OUTPUT_DIR/build-logs" 2>/dev/null || true
