@@ -17,12 +17,13 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v4
 
-      - name: Install ksvalidator
+      - name: Install ksvalidator (from pykickstart)
         run: |
           sudo apt-get update
           sudo apt-get install -y python3-pip
           python3 -m pip install --upgrade pip
-          python3 -m pip install ksvalidator
+          # ksvalidator ships with pykickstart; there is no PyPI package named "ksvalidator".
+          python3 -m pip install pykickstart
 
       - name: Validate Kickstart files
         run: |
