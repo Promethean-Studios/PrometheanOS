@@ -28,6 +28,19 @@ jobs:
             slirp4netns \
             uidmap
 
+      - name: Probe host loop environment
+        # Root-cause context for the losetup failure in run 34311360230: GitHub
+        # runner hosts have the loop module loaded (snapd holds dozens of loop
+        # mounts) and /dev/loop-control present, so the failure was inside the
+        # rootless podman container, not on the host. Keep this step cheap and
+        # non-fatal; it exists so future run logs always carry the host loop
+        # state next to any losetup error.
+        run: |
+          echo "== loop module =="; grep '^loop ' /proc/modules || echo "loop module NOT loaded"
+          echo "== /dev/loop-control =="; ls -l /dev/loop-control || echo "missing"
+          echo "== loop devices in use =="; losetup -l 2>/dev/null | head -5 || true
+          echo "total in use: $(losetup -l 2>/dev/null | tail -n +2 | wc -l)"
+
       - name: Build ISO
         run: ./build.sh
 
