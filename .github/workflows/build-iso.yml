@@ -42,7 +42,27 @@ jobs:
           echo "total in use: $(losetup -l 2>/dev/null | tail -n +2 | wc -l)"
 
       - name: Build ISO
-        run: ./build.sh
+        # shell: bash implies -eo pipefail, so the tee cannot mask a build.sh
+        # failure; the tee'd copy keeps the lmc/anaconda console output next to
+        # the artifact logs for debugging.
+        shell: bash
+        run: |
+          mkdir -p build
+          ./build.sh 2>&1 | tee build/build-lmc.log
+      - name: Upload build failure logs
+        # On a transaction failure anaconda prints only a generic message to
+        # the console; the per-package/scriptlet detail exists solely in log
+        # files from inside the (now removed) build container. build.sh copies
+        # those to build/output/build-logs/ on failure. Success runs upload
+        # nothing (if-no-files-found: ignore keeps this lean).
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: |
+            build/output/build-logs/
+            build/build-lmc.log
+          if-no-files-found: ignore
 
       - name: Verify ISO output
         run: |
