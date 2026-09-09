@@ -1,7 +1,7 @@
 import json
 import shutil
 import subprocess
-from typing import Any
+from typing import Any, ClassVar
 
 import psutil
 
@@ -9,7 +9,7 @@ import psutil
 class HardwareMonitor:
     """Collect hardware telemetry for the Promethean Control Center."""
 
-    AI_PROCESS_NAMES = {
+    AI_PROCESS_NAMES: ClassVar[set[str]] = {
         "ollama",
         "llama",
         "llama.cpp",
@@ -95,7 +95,7 @@ class HardwareMonitor:
                     memory_mb = float(rss.get("rss", 0)) / (1024 * 1024)
                 else:
                     memory_mb = getattr(rss, "rss", 0) / (1024 * 1024) if rss else 0.0
-            except Exception:
+            except Exception:  # noqa: BLE001 - probe failure must degrade to unknown, never abort collection
                 memory_mb = 0.0
 
             workloads.append(

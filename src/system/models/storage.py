@@ -7,7 +7,7 @@ import urllib.request
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 
 @dataclass
@@ -42,7 +42,7 @@ class DownloadJob:
 class ModelStorage:
     """Manage model files without executing or loading downloaded content."""
 
-    EXTENSIONS = {".gguf", ".ggml", ".safetensors", ".bin", ".pt", ".onnx", ".pth"}
+    EXTENSIONS: ClassVar[set[str]] = {".gguf", ".ggml", ".safetensors", ".bin", ".pt", ".onnx", ".pth"}
 
     def __init__(self, root: Path | str | None = None):
         requested = Path(root or "/data/models").expanduser().resolve()

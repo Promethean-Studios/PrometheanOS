@@ -45,7 +45,7 @@ class PrometheanService:
             **snapshot,
         }
 
-    def get_ai_status(self, runtimes: dict[str, str] = None) -> dict[str, Any]:
+    def get_ai_status(self, runtimes: dict[str, str] | None = None) -> dict[str, Any]:
         runtimes = runtimes or self.capability_engine.detect_runtimes()
 
         return {

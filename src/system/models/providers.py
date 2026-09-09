@@ -6,7 +6,7 @@ import urllib.request
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from .metadata import ModelMetadata
 
@@ -33,7 +33,7 @@ def _format_for(path: Path) -> str | None:
 
 class FilesystemModelProvider(ModelProvider):
     name = "filesystem"
-    extensions = {".gguf", ".ggml", ".safetensors", ".bin", ".pt", ".onnx"}
+    extensions: ClassVar[set[str]] = {".gguf", ".ggml", ".safetensors", ".bin", ".pt", ".onnx"}
 
     def discover(self, locations: Iterable[Path]) -> list[ModelMetadata]:
         models: list[ModelMetadata] = []

@@ -3,9 +3,9 @@ from __future__ import annotations
 import re
 import threading
 from collections.abc import Callable, Iterable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from time import monotonic
-from typing import Any
+from typing import Any, ClassVar
 
 import psutil
 
@@ -24,21 +24,21 @@ UNAVAILABLE = None
 
 
 def _timestamp() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
 def _safe_call(name: str, function: Callable[[], dict[str, Any]]) -> tuple[dict[str, Any], str | None]:
     try:
         value = function()
         return value if isinstance(value, dict) else {}, None
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - per-section degradation: record and continue
         return {}, f"{name}: {type(exc).__name__}"
 
 
 class AIWorkloadDetector:
     """Identify likely AI processes without changing process state."""
 
-    _MARKERS = {
+    _MARKERS: ClassVar[dict[str, tuple[str, ...]]] = {
         "ollama": ("ollama",),
         "llama.cpp": ("llama-server", "llama-cli", "llama.cpp", "llama-cpp-python"),
         "vllm": ("vllm",),
@@ -64,7 +64,7 @@ class AIWorkloadDetector:
         errors = []
         try:
             processes = process_iter(["pid", "name", "cmdline", "memory_info", "cpu_percent"])
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - telemetry must never crash the caller
             return {"workloads": [], "errors": [f"process enumeration: {type(exc).__name__}"]}
 
         for process in processes:
@@ -91,7 +91,7 @@ class AIWorkloadDetector:
                 })
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 continue
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - per-process degradation: record and continue
                 errors.append(f"process: {type(exc).__name__}")
         return {"workloads": workloads, "errors": errors}
 

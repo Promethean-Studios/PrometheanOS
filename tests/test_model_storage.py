@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import ClassVar
 
 import pytest
 
@@ -6,7 +7,7 @@ from src.system.models.storage import ModelDownloadManager, ModelStorage
 
 
 class FakeResponse:
-    headers = {"Content-Length": "11"}
+    headers: ClassVar[dict[str, str]] = {"Content-Length": "11"}
 
     def __enter__(self):
         return self

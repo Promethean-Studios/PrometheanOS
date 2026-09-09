@@ -4,7 +4,7 @@ import json
 import re
 from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
 from threading import Lock
@@ -99,7 +99,7 @@ class AuditLogger:
         event = {
             "requested_action": _safe_text(request.operation),
             "requesting_component": _safe_text(request.requesting_component),
-            "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "timestamp": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
             "result": result.result,
             "user_confirmation": bool(request.user_confirmed),
             "target": _safe_text(request.target),
