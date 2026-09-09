@@ -32,6 +32,7 @@ mkdir -p "$(dirname "$SERIAL_LOG")"
 : > "$SERIAL_LOG"
 
 echo "Starting ${BOOT_SECONDS}s headless UEFI smoke test for $ISO"
+status=0
 timeout --foreground "${BOOT_SECONDS}s" qemu-system-x86_64 \
   -machine q35,accel=tcg \
   -cpu max \
@@ -45,16 +46,15 @@ timeout --foreground "${BOOT_SECONDS}s" qemu-system-x86_64 \
   -serial file:"$SERIAL_LOG" \
   -nic user,model=virtio \
   -no-reboot \
-  -monitor none
+  -monitor none || status=$?
 
 if [[ -f "$SERIAL_LOG" ]]; then
   echo '--- QEMU serial log ---'
   tail -80 "$SERIAL_LOG"
 fi
 
-status=$?
 if [[ $status -eq 124 ]]; then
-  echo "QEMU remained running for ${BOOT_SECONDS}s; boot smoke test completed." 
+  echo "QEMU remained running for ${BOOT_SECONDS}s; boot smoke test completed."
   exit 0
 fi
 exit "$status"
