@@ -36,15 +36,22 @@ podman run --rm \
   "$CONTAINER_IMAGE" \
   bash -lc '
     set -euo pipefail
-    dnf -y install qemu-system-x86-core qemu-img edk2-ovmf lorax livemedia-creator isomd5sum pykickstart
+    # anaconda + e2fsprogs are required by livemedia-creator --no-virt:
+    # anaconda runs the kickstart install directly on the host container
+    # ("no-virt requires anaconda to be installed.") and mkfs.ext4 builds
+    # the rootfs image. qemu/ovmf are only needed by --virt installs.
+    dnf -y install anaconda e2fsprogs lorax livemedia-creator isomd5sum pykickstart
     livemedia-creator \
       --make-iso \
+      --no-virt \
+      --nomacboot \
+      --extra-boot-args="console=ttyS0,115200" \
       --ks=/workspace/kickstarts/$KICKSTART_NAME \
       --resultdir=/tmp/live-root/result \
       --volid="PROMETHEANOS" \
       --iso-name="PrometheanOS-KDE.iso" \
       --project="PrometheanOS" \
-      --releasever="44"
+      --releasever="'"$FEDORA_RELEASE"'"
   '
 
 iso_path="$(find "$TEMP_RESULT_ROOT" -maxdepth 3 -type f -iname '*.iso' -print -quit)"

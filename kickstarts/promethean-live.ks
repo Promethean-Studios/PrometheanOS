@@ -12,7 +12,11 @@ timezone UTC --utc
 network --bootproto=dhcp --device=link --activate
 
 rootpw --lock
-user --name=promethean --groups=wheel --lock --shell=/bin/bash
+# livemedia-creator --no-virt --make-iso requires a single / part to size the
+# rootfs image (calculate_disk_size raises "No / partition in the kickstart"
+# without it). Same pattern as lorax's own fedora-livemedia.ks example.
+part / --size=8192
+user --name=promethean --groups=wheel --shell=/bin/bash
 
 %packages
 @core
@@ -37,6 +41,13 @@ pipewire-alsa
 pipewire-pulseaudio
 wireplumber
 nss-mdns
+# Required for the live ISO to boot: livemedia-creator rebuilds the initramfs
+# with --add dmsquash-live and hard-fails --make-iso without dracut-live;
+# dracut-config-generic matches its --no-hostonly rebuild. Fedora's own
+# livemedia kickstart ships all three.
+dracut-live
+dracut-config-generic
+kernel-modules
 %end
 
 %post --nochroot --log=/mnt/sysimage/root/promethean-copy.log --erroronfail
@@ -48,6 +59,11 @@ rm -rf /mnt/sysimage/srv/promethean/.git /mnt/sysimage/srv/promethean/.pytest_ca
 
 %post --log=/root/promethean-post.log --erroronfail
 set -eu
+# Mirror Fedora's liveuser pattern (livesys-scripts): the autologin user gets
+# an EMPTY password, not a locked one. SDDM's sddm-autologin PAM stack uses
+# pam_permit for auth, but a locked password field is the known cause of
+# autologin bouncing back to the greeter.
+passwd -d promethean
 install -d -m 0775 -o promethean -g promethean /data/models /data/models/ollama /data/models/huggingface /data/models/cache
 install -d -m 0755 /usr/local/libexec/promethean /usr/share/promethean/desktop /etc/xdg/autostart
 install -m 0755 /srv/promethean/promethean-hardware-detect.sh /usr/local/libexec/promethean/hardware-detect.sh
@@ -65,7 +81,7 @@ mkdir -p /etc/sddm.conf.d /etc/profile.d
 cat > /etc/sddm.conf.d/10-promethean-live.conf <<'EOF'
 [Autologin]
 User=promethean
-Session=plasmawayland.desktop
+Session=plasma.desktop
 Relogin=false
 EOF
 cat > /etc/profile.d/promethean.sh <<'EOF'

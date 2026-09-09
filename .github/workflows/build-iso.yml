@@ -6,7 +6,10 @@ on:
 jobs:
   build-iso:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    # ISO build (~30-60 min, anaconda --no-virt) + QEMU TCG boot test.
+    # TCG has no KVM, so a Plasma boot takes several minutes; 110 min keeps
+    # the job under the ~2h budget with margin.
+    timeout-minutes: 110
     steps:
       - name: Check out code
         uses: actions/checkout@v4
@@ -29,6 +32,32 @@ jobs:
             echo "ISO was not produced at build/output/PrometheanOS-KDE.iso" >&2
             exit 1
           fi
+
+      - name: Install QEMU boot-test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86 ovmf
+
+      - name: QEMU boot smoke test
+        # The smoke-test script owns the QEMU invocation; it also asserts that
+        # the serial log shows real boot evidence when
+        # PROMETHEAN_ASSERT_MARKER is set. TCG (no KVM on runners) is slow, so
+        # give the Plasma boot a generous 600s window.
+        env:
+          BOOT_SECONDS: 600
+          RAM_MB: 4096
+          CPUS: 4
+          SERIAL_LOG: ${{ github.workspace }}/build/qemu-serial.log
+          PROMETHEAN_ASSERT_MARKER: "Reached target Graphical Interface,SDDM"
+        run: ./scripts/qemu-smoke-test.sh build/output/PrometheanOS-KDE.iso
+
+      - name: Upload QEMU serial log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qemu-serial-log
+          path: build/qemu-serial.log
+          if-no-files-found: ignore
 
       - name: Upload ISO artifact
         uses: actions/upload-artifact@v4
