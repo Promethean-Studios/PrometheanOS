@@ -4,8 +4,9 @@ import json
 import urllib.parse
 import urllib.request
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any
 
 from .metadata import ModelMetadata
 
@@ -14,18 +15,18 @@ class ModelProvider(ABC):
     name = "unknown"
 
     @abstractmethod
-    def discover(self, locations: Iterable[Path]) -> List[ModelMetadata]:
+    def discover(self, locations: Iterable[Path]) -> list[ModelMetadata]:
         raise NotImplementedError
 
-    def search(self, query: str, limit: int = 20) -> List[ModelMetadata]:
+    def search(self, query: str, limit: int = 20) -> list[ModelMetadata]:
         return []
 
 
-def _integer(value: Any) -> Optional[int]:
+def _integer(value: Any) -> int | None:
     return value if isinstance(value, int) and not isinstance(value, bool) else None
 
 
-def _format_for(path: Path) -> Optional[str]:
+def _format_for(path: Path) -> str | None:
     formats = {".gguf": "gguf", ".ggml": "ggml", ".safetensors": "safetensors", ".bin": "pytorch", ".pt": "pytorch", ".onnx": "onnx"}
     return formats.get(path.suffix.lower())
 
@@ -34,8 +35,8 @@ class FilesystemModelProvider(ModelProvider):
     name = "filesystem"
     extensions = {".gguf", ".ggml", ".safetensors", ".bin", ".pt", ".onnx"}
 
-    def discover(self, locations: Iterable[Path]) -> List[ModelMetadata]:
-        models: List[ModelMetadata] = []
+    def discover(self, locations: Iterable[Path]) -> list[ModelMetadata]:
+        models: list[ModelMetadata] = []
         for location in locations:
             if not location.is_dir():
                 continue
@@ -55,7 +56,7 @@ class FilesystemModelProvider(ModelProvider):
 class HuggingFaceProvider(ModelProvider):
     name = "huggingface"
 
-    def search(self, query: str, limit: int = 20) -> List[ModelMetadata]:
+    def search(self, query: str, limit: int = 20) -> list[ModelMetadata]:
         params = urllib.parse.urlencode({"search": query, "limit": max(1, min(limit, 100)), "full": "true"})
         request = urllib.request.Request(f"https://huggingface.co/api/models?{params}", headers={"User-Agent": "PrometheanOS/0.1", "Accept": "application/json"})
         try:
@@ -68,7 +69,7 @@ class HuggingFaceProvider(ModelProvider):
         return [self._remote_metadata(item) for item in payload if isinstance(item, dict) and item.get("id")]
 
     @staticmethod
-    def _remote_metadata(data: Dict[str, Any]) -> ModelMetadata:
+    def _remote_metadata(data: dict[str, Any]) -> ModelMetadata:
         files = []
         for sibling in data.get("siblings", []):
             if not isinstance(sibling, dict) or not sibling.get("rfilename"):
@@ -85,8 +86,8 @@ class HuggingFaceProvider(ModelProvider):
             runtime_compatibility=["transformers"],
         )
 
-    def discover(self, locations: Iterable[Path]) -> List[ModelMetadata]:
-        models: List[ModelMetadata] = []
+    def discover(self, locations: Iterable[Path]) -> list[ModelMetadata]:
+        models: list[ModelMetadata] = []
         for location in locations:
             if not location.is_dir():
                 continue
@@ -102,14 +103,14 @@ class HuggingFaceProvider(ModelProvider):
         return models
 
     @staticmethod
-    def _read_json(path: Path) -> Optional[Dict[str, Any]]:
+    def _read_json(path: Path) -> dict[str, Any] | None:
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             return None
         return data if isinstance(data, dict) else None
 
-    def _metadata(self, path: Path, config: Dict[str, Any]) -> ModelMetadata:
+    def _metadata(self, path: Path, config: dict[str, Any]) -> ModelMetadata:
         try:
             files = [item for item in path.rglob("*") if item.is_file()]
             size = sum(item.stat().st_size for item in files)
@@ -123,8 +124,8 @@ class HuggingFaceProvider(ModelProvider):
 class OllamaProvider(ModelProvider):
     name = "ollama"
 
-    def discover(self, locations: Iterable[Path]) -> List[ModelMetadata]:
-        models: List[ModelMetadata] = []
+    def discover(self, locations: Iterable[Path]) -> list[ModelMetadata]:
+        models: list[ModelMetadata] = []
         for location in locations:
             manifest_root = location / "manifests"
             if not manifest_root.is_dir():
@@ -143,7 +144,7 @@ class OllamaProvider(ModelProvider):
         return models
 
     @staticmethod
-    def _read_json(path: Path) -> Optional[Dict[str, Any]]:
+    def _read_json(path: Path) -> dict[str, Any] | None:
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
@@ -151,7 +152,7 @@ class OllamaProvider(ModelProvider):
         return data if isinstance(data, dict) else None
 
     @staticmethod
-    def _blob_size(manifest: Dict[str, Any]) -> Optional[int]:
+    def _blob_size(manifest: dict[str, Any]) -> int | None:
         sizes = [_integer(item.get("size")) for item in manifest.get("layers", []) if isinstance(item, dict)]
         sizes = [size for size in sizes if size is not None]
         return sum(sizes) if sizes else None

@@ -2,15 +2,23 @@ from __future__ import annotations
 
 import re
 import threading
+from collections.abc import Callable, Iterable
 from datetime import datetime, timezone
 from time import monotonic
-from typing import Any, Callable, Dict, Iterable, Optional
+from typing import Any
 
 import psutil
 
 from src.system.hardware.capabilities import CapabilityEngine
-from src.system.hardware.providers import CPUProvider, GPUProvider, MemoryProvider, NetworkProvider, PowerProvider, StorageProvider, SystemProvider
-
+from src.system.hardware.providers import (
+    CPUProvider,
+    GPUProvider,
+    MemoryProvider,
+    NetworkProvider,
+    PowerProvider,
+    StorageProvider,
+    SystemProvider,
+)
 
 UNAVAILABLE = None
 
@@ -19,7 +27,7 @@ def _timestamp() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def _safe_call(name: str, function: Callable[[], Dict[str, Any]]) -> tuple[Dict[str, Any], Optional[str]]:
+def _safe_call(name: str, function: Callable[[], dict[str, Any]]) -> tuple[dict[str, Any], str | None]:
     try:
         value = function()
         return value if isinstance(value, dict) else {}, None
@@ -38,10 +46,10 @@ class AIWorkloadDetector:
         "jupyter": ("jupyter", "ipykernel"),
         "pytorch": ("torchrun", "torch.distributed", "accelerate launch", "deepspeed"),
     }
-    _MODEL_PATTERN = re.compile(r"(?:--model(?:-path)?|model_path|model=)\s*[=:/]?\s*([^\s,]+)", re.I)
+    _MODEL_PATTERN = re.compile(r"(?:--model(?:-path)?|model_path|model=)\s*[=:/]?\s*([^\s,]+)", re.IGNORECASE)
 
     @classmethod
-    def _classify(cls, name: str, cmdline: str) -> Optional[str]:
+    def _classify(cls, name: str, cmdline: str) -> str | None:
         text = f"{name} {cmdline}".lower()
         for workload, markers in cls._MARKERS.items():
             if any(marker in text for marker in markers):
@@ -51,7 +59,7 @@ class AIWorkloadDetector:
         return None
 
     @classmethod
-    def detect(cls, process_iter: Callable[..., Iterable[Any]] = psutil.process_iter) -> Dict[str, Any]:
+    def detect(cls, process_iter: Callable[..., Iterable[Any]] = psutil.process_iter) -> dict[str, Any]:
         workloads = []
         errors = []
         try:
@@ -91,22 +99,22 @@ class AIWorkloadDetector:
 class SystemTelemetryCollector:
     """Poll and cache read-only system telemetry with per-section degradation."""
 
-    def __init__(self, poll_interval: float = 2.0, capability_engine: Optional[CapabilityEngine] = None):
+    def __init__(self, poll_interval: float = 2.0, capability_engine: CapabilityEngine | None = None):
         self.poll_interval = max(0.0, float(poll_interval))
         self.capability_engine = capability_engine or CapabilityEngine()
-        self._cached: Optional[Dict[str, Any]] = None
+        self._cached: dict[str, Any] | None = None
         self._polled_at = 0.0
         self._lock = threading.Lock()
-        self._network_previous: Optional[Dict[str, Any]] = None
+        self._network_previous: dict[str, Any] | None = None
 
-    def snapshot(self, force: bool = False) -> Dict[str, Any]:
+    def snapshot(self, force: bool = False) -> dict[str, Any]:
         with self._lock:
             now = monotonic()
             if self._cached is not None and not force and now - self._polled_at < self.poll_interval:
                 return self._cached
 
-            errors: Dict[str, str] = {}
-            sections: Dict[str, Dict[str, Any]] = {}
+            errors: dict[str, str] = {}
+            sections: dict[str, dict[str, Any]] = {}
             providers = {
                 "cpu": CPUProvider.detect,
                 "gpu": GPUProvider.detect,
@@ -141,7 +149,7 @@ class SystemTelemetryCollector:
             self._polled_at = now
             return snapshot
 
-    def _add_network_rates(self, network: Dict[str, Any], polled_at: float) -> None:
+    def _add_network_rates(self, network: dict[str, Any], polled_at: float) -> None:
         current = network.get("interfaces", {})
         previous = self._network_previous
         elapsed = polled_at - self._polled_at if previous is not None else 0
@@ -155,12 +163,12 @@ class SystemTelemetryCollector:
         }
 
     @staticmethod
-    def _rate(current: Any, previous: Any, elapsed: float) -> Optional[float]:
+    def _rate(current: Any, previous: Any, elapsed: float) -> float | None:
         if elapsed <= 0 or not isinstance(current, (int, float)) or not isinstance(previous, (int, float)):
             return None
         return round(max(0, current - previous) / elapsed, 1)
 
-    def _ai_snapshot(self) -> Dict[str, Any]:
+    def _ai_snapshot(self) -> dict[str, Any]:
         runtimes = self.capability_engine.detect_runtimes()
         detected = AIWorkloadDetector.detect()
         return {"runtimes": runtimes, "workloads": detected["workloads"], "errors": detected["errors"]}

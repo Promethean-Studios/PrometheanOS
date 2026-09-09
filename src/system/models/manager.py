@@ -1,22 +1,28 @@
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
-import os
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any
 
-from .metadata import ModelMetadata
-from .providers import FilesystemModelProvider, HuggingFaceProvider, ModelProvider, OllamaProvider
-from .recommendations import RecommendationEngine
 from .compatibility import HardwareCompatibilityEngine
+from .metadata import ModelMetadata
+from .providers import (
+    FilesystemModelProvider,
+    HuggingFaceProvider,
+    ModelProvider,
+    OllamaProvider,
+)
+from .recommendations import RecommendationEngine
 from .storage import ModelDownloadManager, ModelStorage
 
 
 class ModelManager:
     """Aggregate provider-neutral model discovery and recommendations."""
 
-    def __init__(self, locations: Optional[Iterable[Path | str]] = None, providers: Optional[Iterable[ModelProvider]] = None, storage_root: Optional[Path | str] = None):
+    def __init__(self, locations: Iterable[Path | str] | None = None, providers: Iterable[ModelProvider] | None = None, storage_root: Path | str | None = None):
         model_root = Path(storage_root or os.environ.get("PROMETHEAN_MODEL_DIR", "/data/models")).expanduser()
         self.storage = ModelStorage(model_root)
         self.downloads = ModelDownloadManager(self.storage)
@@ -25,16 +31,16 @@ class ModelManager:
         self.providers = list(providers or (HuggingFaceProvider(), OllamaProvider(), FilesystemModelProvider()))
         self.recommendation_engine = RecommendationEngine()
 
-    def discover(self) -> List[ModelMetadata]:
-        models: List[ModelMetadata] = []
+    def discover(self) -> list[ModelMetadata]:
+        models: list[ModelMetadata] = []
         for provider in self.providers:
             models.extend(provider.discover(self.locations))
         return models
 
-    def installed(self) -> List[Dict[str, Any]]:
+    def installed(self) -> list[dict[str, Any]]:
         return self.storage.list_files()
 
-    def search(self, query: str, limit: int = 20) -> List[Dict[str, Any]]:
+    def search(self, query: str, limit: int = 20) -> list[dict[str, Any]]:
         provider = next((item for item in self.providers if isinstance(item, HuggingFaceProvider)), HuggingFaceProvider())
         hardware = self.compatibility.current_hardware()
         results = []
@@ -44,7 +50,7 @@ class ModelManager:
             results.append(item)
         return results
 
-    def download(self, repository_id: str, filename: str, expected_size: Optional[int] = None) -> Dict[str, Any]:
+    def download(self, repository_id: str, filename: str, expected_size: int | None = None) -> dict[str, Any]:
         try:
             existing = self.storage.existing(repository_id, filename)
         except ValueError as exc:
@@ -59,20 +65,20 @@ class ModelManager:
             return result
         return {**result, "compatibility": estimate}
 
-    def download_status(self, job_id: str) -> Optional[Dict[str, Any]]:
+    def download_status(self, job_id: str) -> dict[str, Any] | None:
         return self.downloads.get(job_id)
 
-    def cancel_download(self, job_id: str) -> Optional[Dict[str, Any]]:
+    def cancel_download(self, job_id: str) -> dict[str, Any] | None:
         return self.downloads.cancel(job_id)
 
-    def delete_installed(self, path: str) -> Dict[str, Any]:
+    def delete_installed(self, path: str) -> dict[str, Any]:
         try:
             deleted = self.storage.delete(path)
         except (OSError, ValueError):
             return {"ok": False, "error": "invalid model path"}
         return {"ok": deleted, "error": None if deleted else "model file not found"}
 
-    def launch(self, model_name: str) -> Dict[str, Any]:
+    def launch(self, model_name: str) -> dict[str, Any]:
         """Start an installed Ollama model, or return an actionable error."""
         if not model_name.strip():
             return {"ok": False, "error": "A model name is required."}
@@ -92,5 +98,5 @@ class ModelManager:
             return {"ok": False, "error": f"Could not launch Ollama: {exc}"}
         return {"ok": True, "model": model_name, "pid": process.pid}
 
-    def recommend(self, metadata: ModelMetadata, hardware: Dict[str, Any], runtime: Optional[Dict[str, Any]] = None, profile: str = "balanced") -> Dict[str, Any]:
+    def recommend(self, metadata: ModelMetadata, hardware: dict[str, Any], runtime: dict[str, Any] | None = None, profile: str = "balanced") -> dict[str, Any]:
         return self.recommendation_engine.recommend(hardware, metadata, runtime, profile)

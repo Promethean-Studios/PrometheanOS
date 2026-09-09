@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from threading import Lock
-from typing import Any, Callable, Dict, Mapping, Optional
+from typing import Any
 
 
 class PermissionCategory(str, Enum):
@@ -49,11 +50,11 @@ class PermissionResult:
     allowed: bool
     operation: str
     target: str
-    level: Optional[str]
+    level: str | None
     result: str
     reason: str
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
 
@@ -78,7 +79,7 @@ HIGH_RISK_OPERATIONS = {
 }
 
 OPERATION_POLICIES = {**SAFE_OPERATIONS, **CONFIRMATION_OPERATIONS, **HIGH_RISK_OPERATIONS}
-_SECRET_KEY = re.compile(r"(password|passwd|secret|token|api[_-]?key|private[_-]?key|credential)", re.I)
+_SECRET_KEY = re.compile(r"(password|passwd|secret|token|api[_-]?key|private[_-]?key|credential)", re.IGNORECASE)
 
 
 def _safe_text(value: Any) -> str:
@@ -89,7 +90,7 @@ def _safe_text(value: Any) -> str:
 class AuditLogger:
     """Append safe permission events; never records commands or secret arguments."""
 
-    def __init__(self, path: Optional[Path | str] = None):
+    def __init__(self, path: Path | str | None = None):
         self.path = Path(path) if path else None
         self.events = []
         self._lock = Lock()
@@ -114,12 +115,12 @@ class AuditLogger:
 class PermissionBroker:
     """Authorize named operations; it intentionally has no shell or sudo interface."""
 
-    def __init__(self, audit_logger: Optional[AuditLogger] = None, policies: Optional[Mapping[str, OperationPolicy]] = None):
+    def __init__(self, audit_logger: AuditLogger | None = None, policies: Mapping[str, OperationPolicy] | None = None):
         self.audit_logger = audit_logger or AuditLogger()
         self.policies = dict(policies or OPERATION_POLICIES)
-        self._handlers: Dict[str, Callable[[str], Any]] = {}
+        self._handlers: dict[str, Callable[[str], Any]] = {}
 
-    def describe(self) -> Dict[str, Any]:
+    def describe(self) -> dict[str, Any]:
         return {
             operation: {"category": policy.category.value, "level": policy.level.value, "description": policy.description}
             for operation, policy in sorted(self.policies.items())

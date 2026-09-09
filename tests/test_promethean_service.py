@@ -4,7 +4,7 @@ from threading import Thread
 import pytest
 
 from src.system.api.local_api import LocalPrometheanAPI
-from src.system.hardware.providers import GPUProvider, HardwareProvider
+from src.system.hardware.providers import GPUProvider
 from src.system.models import ModelManager
 from src.system.services.promethean_service import PrometheanService
 
@@ -56,8 +56,8 @@ def test_api_rejects_malformed_or_private_paths():
     thread = Thread(target=api.serve_forever, daemon=True)
     thread.start()
     assert api.wait_until_ready(timeout=5)
-    import urllib.request
     import urllib.error
+    import urllib.request
 
     with pytest.raises(urllib.error.HTTPError):
         urllib.request.urlopen("http://127.0.0.1:8767/not-real", timeout=5)

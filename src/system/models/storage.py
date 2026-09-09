@@ -7,7 +7,7 @@ import urllib.request
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 
 @dataclass
@@ -16,13 +16,13 @@ class DownloadJob:
     repo_id: str
     filename: str
     destination: Path
-    total_bytes: Optional[int] = None
+    total_bytes: int | None = None
     downloaded_bytes: int = 0
     status: str = "queued"
-    error: Optional[str] = None
+    error: str | None = None
     cancel_event: threading.Event = field(default_factory=threading.Event)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         progress = None
         if self.total_bytes:
             progress = round(self.downloaded_bytes / self.total_bytes * 100, 2)
@@ -44,7 +44,7 @@ class ModelStorage:
 
     EXTENSIONS = {".gguf", ".ggml", ".safetensors", ".bin", ".pt", ".onnx", ".pth"}
 
-    def __init__(self, root: Optional[Path | str] = None):
+    def __init__(self, root: Path | str | None = None):
         requested = Path(root or "/data/models").expanduser().resolve()
         try:
             requested.mkdir(parents=True, exist_ok=True)
@@ -53,7 +53,7 @@ class ModelStorage:
             self.root = (Path.home() / ".local" / "share" / "promethean" / "models").resolve()
             self.root.mkdir(parents=True, exist_ok=True)
 
-    def list_files(self) -> list[Dict[str, Any]]:
+    def list_files(self) -> list[dict[str, Any]]:
         files = []
         try:
             paths = (path for path in self.root.rglob("*") if path.is_file() and path.suffix.lower() in self.EXTENSIONS)
@@ -67,14 +67,14 @@ class ModelStorage:
             return []
         return files
 
-    def disk_space(self) -> Dict[str, Optional[int]]:
+    def disk_space(self) -> dict[str, int | None]:
         try:
             usage = shutil.disk_usage(self.root)
             return {"total_bytes": usage.total, "used_bytes": usage.used, "free_bytes": usage.free}
         except OSError:
             return {"total_bytes": None, "used_bytes": None, "free_bytes": None}
 
-    def existing(self, repo_id: str, filename: str) -> Optional[Path]:
+    def existing(self, repo_id: str, filename: str) -> Path | None:
         path = self._destination(repo_id, filename)
         return path if path.is_file() else None
 
@@ -104,10 +104,10 @@ class ModelDownloadManager:
 
     def __init__(self, storage: ModelStorage):
         self.storage = storage
-        self._jobs: Dict[str, DownloadJob] = {}
+        self._jobs: dict[str, DownloadJob] = {}
         self._lock = threading.Lock()
 
-    def start(self, repo_id: str, filename: str, expected_size: Optional[int] = None) -> Dict[str, Any]:
+    def start(self, repo_id: str, filename: str, expected_size: int | None = None) -> dict[str, Any]:
         destination = self.storage._destination(repo_id, filename)
         if destination.is_file():
             return {"status": "already_installed", "destination": str(destination), "size_bytes": destination.stat().st_size}
@@ -120,12 +120,12 @@ class ModelDownloadManager:
         threading.Thread(target=self._download, args=(job,), daemon=True).start()
         return job.to_dict()
 
-    def get(self, job_id: str) -> Optional[Dict[str, Any]]:
+    def get(self, job_id: str) -> dict[str, Any] | None:
         with self._lock:
             job = self._jobs.get(job_id)
         return job.to_dict() if job else None
 
-    def cancel(self, job_id: str) -> Optional[Dict[str, Any]]:
+    def cancel(self, job_id: str) -> dict[str, Any] | None:
         with self._lock:
             job = self._jobs.get(job_id)
         if job is None:

@@ -5,7 +5,7 @@ from src.system.telemetry import AIWorkloadDetector, SystemTelemetryCollector
 
 def _empty_providers(monkeypatch):
     for provider in ("GPUProvider", "MemoryProvider", "StorageProvider", "NetworkProvider"):
-        monkeypatch.setattr(f"src.system.telemetry.{provider}.detect", lambda: {})
+        monkeypatch.setattr(f"src.system.telemetry.{provider}.detect", dict)
     monkeypatch.setattr("src.system.telemetry.CapabilityEngine.detect", lambda self: {})
 
 

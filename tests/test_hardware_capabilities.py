@@ -1,6 +1,11 @@
 import json
 
-from src.system.hardware.capabilities import AVAILABLE, INSTALLED_BUT_BROKEN, NOT_INSTALLED, CapabilityEngine
+from src.system.hardware.capabilities import (
+    AVAILABLE,
+    INSTALLED_BUT_BROKEN,
+    NOT_INSTALLED,
+    CapabilityEngine,
+)
 from src.system.hardware.providers import CPUProvider, GPUProvider, StorageProvider
 
 
