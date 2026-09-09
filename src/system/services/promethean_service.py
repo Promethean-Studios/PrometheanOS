@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, List
+from typing import Any
 
 from src.system.hardware.capabilities import CapabilityEngine
 from src.system.models import ModelManager, ModelMetadata
@@ -22,30 +22,30 @@ class PrometheanService:
         self.setup = SetupState(telemetry=self.telemetry)
         self.permission_broker = permission_broker or PermissionBroker()
 
-    def get_models(self) -> List[Dict[str, Any]]:
+    def get_models(self) -> list[dict[str, Any]]:
         return self.model_manager.installed()
 
-    def search_models(self, query: str, limit: int = 20) -> List[Dict[str, Any]]:
+    def search_models(self, query: str, limit: int = 20) -> list[dict[str, Any]]:
         return self.model_manager.search(query, limit)
 
-    def get_setup(self) -> Dict[str, Any]:
+    def get_setup(self) -> dict[str, Any]:
         return self.setup.snapshot()
 
-    def update_setup(self, values: Dict[str, Any], complete: bool = False) -> Dict[str, Any]:
+    def update_setup(self, values: dict[str, Any], complete: bool = False) -> dict[str, Any]:
         return self.setup.complete(values) if complete else self.setup.update(values)
 
-    def recommend_model(self, model: ModelMetadata, profile: str = "balanced") -> Dict[str, Any]:
+    def recommend_model(self, model: ModelMetadata, profile: str = "balanced") -> dict[str, Any]:
         snapshot = self.snapshot()
         return self.model_manager.recommend(model, snapshot, snapshot.get("ai", {}).get("runtimes", {}), profile)
 
-    def snapshot(self) -> Dict[str, Any]:
+    def snapshot(self) -> dict[str, Any]:
         snapshot = self.telemetry.snapshot()
         return {
             "service": {"name": self.name, "version": self.version},
             **snapshot,
         }
 
-    def get_ai_status(self, runtimes: Dict[str, str] = None) -> Dict[str, Any]:
+    def get_ai_status(self, runtimes: dict[str, str] | None = None) -> dict[str, Any]:
         runtimes = runtimes or self.capability_engine.detect_runtimes()
 
         return {
@@ -53,10 +53,10 @@ class PrometheanService:
             "ai_workloads": self.get_ai_workloads(),
         }
 
-    def get_ai_workloads(self) -> List[Dict[str, Any]]:
+    def get_ai_workloads(self) -> list[dict[str, Any]]:
         return AIWorkloadDetector.detect()["workloads"]
 
-    def get_permissions(self) -> Dict[str, str]:
+    def get_permissions(self) -> dict[str, str]:
         legacy = {
             "read_system_information": "allowed",
             "install_software": "requires_explicit_confirmation",
@@ -70,7 +70,7 @@ class PrometheanService:
     def request_permission(self, request):
         return self.permission_broker.request(request).to_dict()
 
-    def status(self) -> Dict[str, Any]:
+    def status(self) -> dict[str, Any]:
         return {"status": "ok", "snapshot": self.snapshot()}
 
     def to_json(self) -> str:

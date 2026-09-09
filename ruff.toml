@@ -1,0 +1,39 @@
+# Pinned rule set for PrometheanOS tooling.
+#
+# Why pin: CI (lint.yml) installs the latest ruff and runs `ruff check .`
+# with the linter defaults. Ruff's default selection has expanded across
+# releases (this repo went from zero findings under older defaults to 238
+# under ruff 0.16), so relying on defaults makes CI fail on ruff upgrades
+# that have nothing to do with our code. This file pins the intended set:
+# the classic core (pycodestyle errors, pyflakes) plus the families this
+# codebase is actually fixed and verified against.
+target-version = "py312"
+
+[lint]
+select = [
+    "E4",   # pycodestyle errors (imports, indentation, whitespace at statement level)
+    "E7",   # pycodestyle errors (statements: bare except, comparison, assignment)
+    "E9",   # pycodestyle runtime-level errors (syntax, undefined name)
+    "F",    # pyflakes (unused imports/variables, f-string issues)
+    "I",    # isort import ordering
+    "UP",   # pyupgrade (modern typing/generics; code targets 3.12)
+    "B",    # flake8-bugbear (likely bugs)
+    "BLE",  # blind except (must be explicit + noqa-commented where degradation is intended)
+    "RUF",  # ruff-specific (ClassVar for mutable class attrs, unused unpacking, ...)
+    "PLW",  # pylint warnings (self-assignment, ...)
+    "FURB", # refurb modernizations (regex flag constants, ...)
+    "PIE",  # useless constructs (redundant lambda, ...)
+    "EXE",  # executable/shebang consistency
+]
+ignore = [
+    # UP042 (str, Enum) -> enum.StrEnum: the runtime str()/format() semantics of
+    # `class X(str, Enum)` differ from StrEnum in edge cases, and these enums
+    # (PermissionCategory/PermissionLevel in src/system/security/permissions.py)
+    # are used in policy checks and API payloads. Excluded to avoid behavior
+    # changes during stabilization; revisit if the permission layer gains tests
+    # that pin its string behavior.
+    "UP042",
+]
+
+[lint.flake8-bugbear]
+# extend-immutable-calls = []  # add here if a provider default needs a call default

@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any
 
 from .metadata import ModelMetadata
-
 
 PROFILES = {"balanced", "ai_performance", "low_end", "developer"}
 
@@ -15,19 +14,19 @@ class Recommendation:
     basis: str
     rationale: str
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {"value": self.value, "basis": self.basis, "rationale": self.rationale}
 
 
-def _recommend(value: Any, basis: str, rationale: str) -> Dict[str, Any]:
+def _recommend(value: Any, basis: str, rationale: str) -> dict[str, Any]:
     return Recommendation(value, basis, rationale).to_dict()
 
 
-def _number(value: Any) -> Optional[float]:
+def _number(value: Any) -> float | None:
     return value if isinstance(value, (int, float)) and not isinstance(value, bool) else None
 
 
-def _memory_estimate_mb(metadata: ModelMetadata, context_length: Optional[int]) -> Optional[float]:
+def _memory_estimate_mb(metadata: ModelMetadata, context_length: int | None) -> float | None:
     """Estimate working memory from known artifact size or parameter count.
 
     Runtime allocations vary substantially, so this is intentionally an estimate.
@@ -54,11 +53,11 @@ class RecommendationEngine:
 
     def recommend(
         self,
-        hardware: Dict[str, Any],
+        hardware: dict[str, Any],
         metadata: ModelMetadata,
-        runtime: Optional[Dict[str, Any]] = None,
+        runtime: dict[str, Any] | None = None,
         profile: str = "balanced",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         profile = profile.lower().replace("-", "_").replace(" ", "_")
         if profile not in PROFILES:
             raise ValueError(f"unknown profile: {profile}")

@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any
 
 from src.system.telemetry import SystemTelemetryCollector
-
 
 CATEGORIES = ("Excellent", "Good", "Heavy", "Not Recommended", "Unsupported")
 
@@ -13,7 +12,7 @@ CATEGORIES = ("Excellent", "Good", "Heavy", "Not Recommended", "Unsupported")
 class ModelSizeBand:
     name: str
     minimum_billions: float
-    maximum_billions: Optional[float]
+    maximum_billions: float | None
 
 
 MODEL_SIZE_BANDS = (
@@ -26,7 +25,7 @@ MODEL_SIZE_BANDS = (
 )
 
 
-def _number(value: Any) -> Optional[float]:
+def _number(value: Any) -> float | None:
     return value if isinstance(value, (int, float)) and not isinstance(value, bool) else None
 
 
@@ -45,7 +44,7 @@ def _quantization_bits(value: Any) -> float:
     return 16.0
 
 
-def _size_band(parameter_count: Any) -> Optional[ModelSizeBand]:
+def _size_band(parameter_count: Any) -> ModelSizeBand | None:
     parameters = _number(parameter_count)
     if parameters is None or parameters <= 0:
         return None
@@ -56,7 +55,7 @@ def _size_band(parameter_count: Any) -> Optional[ModelSizeBand]:
     return MODEL_SIZE_BANDS[-1] if billions > MODEL_SIZE_BANDS[-1].minimum_billions else None
 
 
-def _gpu_devices(hardware: Dict[str, Any]) -> list[Dict[str, Any]]:
+def _gpu_devices(hardware: dict[str, Any]) -> list[dict[str, Any]]:
     gpu = hardware.get("gpu") or {}
     devices = gpu.get("gpus")
     if isinstance(devices, list) and devices:
@@ -71,13 +70,13 @@ class HardwareCompatibilityEngine:
     and model architecture can materially change actual requirements.
     """
 
-    def __init__(self, telemetry: Optional[SystemTelemetryCollector] = None):
+    def __init__(self, telemetry: SystemTelemetryCollector | None = None):
         self.telemetry = telemetry or SystemTelemetryCollector()
 
-    def current_hardware(self) -> Dict[str, Any]:
+    def current_hardware(self) -> dict[str, Any]:
         return self.telemetry.snapshot()
 
-    def assess(self, metadata: Dict[str, Any], hardware: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def assess(self, metadata: dict[str, Any], hardware: dict[str, Any] | None = None) -> dict[str, Any]:
         hardware = hardware or self.current_hardware()
         parameters = _number(metadata.get("parameter_count"))
         band = _size_band(parameters)
@@ -146,6 +145,6 @@ class HardwareCompatibilityEngine:
         }
 
 
-def estimate_compatibility(metadata: Dict[str, Any], hardware: Dict[str, Any]) -> Dict[str, Any]:
+def estimate_compatibility(metadata: dict[str, Any], hardware: dict[str, Any]) -> dict[str, Any]:
     """Backward-compatible entry point for compatibility estimates."""
     return HardwareCompatibilityEngine().assess(metadata, hardware)

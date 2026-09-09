@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+
 from src.system.api.local_api import LocalPrometheanAPI
 from src.system.services.promethean_service import PrometheanService
 

@@ -8,12 +8,12 @@ import subprocess
 import time
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import psutil
 
 
-def _run(command: List[str], timeout: float = 2.0) -> Optional[subprocess.CompletedProcess[str]]:
+def _run(command: list[str], timeout: float = 2.0) -> subprocess.CompletedProcess[str] | None:
     try:
         return subprocess.run(command, capture_output=True, text=True, check=False, timeout=timeout)
     except (OSError, subprocess.TimeoutExpired):
@@ -29,14 +29,14 @@ class HardwareProvider(ABC):
 
     @staticmethod
     @abstractmethod
-    def detect() -> Dict[str, Any]:
+    def detect() -> dict[str, Any]:
         raise NotImplementedError
 
 
 class CPUProvider(HardwareProvider):
     @staticmethod
-    def _cpuinfo() -> Dict[str, str]:
-        values: Dict[str, str] = {}
+    def _cpuinfo() -> dict[str, str]:
+        values: dict[str, str] = {}
         try:
             for line in Path("/proc/cpuinfo").read_text(errors="replace").splitlines():
                 if ":" in line:
@@ -47,7 +47,7 @@ class CPUProvider(HardwareProvider):
         return values
 
     @staticmethod
-    def detect() -> Dict[str, Any]:
+    def detect() -> dict[str, Any]:
         info = CPUProvider._cpuinfo()
         frequency = psutil.cpu_freq()
         flags = info.get("flags", info.get("features", "")).split()
@@ -76,7 +76,7 @@ class CPUProvider(HardwareProvider):
 
 class GPUProvider(HardwareProvider):
     @staticmethod
-    def _nvidia() -> Optional[Dict[str, Any]]:
+    def _nvidia() -> dict[str, Any] | None:
         if not shutil.which("nvidia-smi"):
             return None
         result = _run(["nvidia-smi", "--query-gpu=name,memory.total,memory.used,utilization.gpu,temperature.gpu,clocks.gr,power.draw,driver_version", "--format=csv,noheader,nounits"])
@@ -86,7 +86,7 @@ class GPUProvider(HardwareProvider):
         if not rows or any(len(fields) < 8 for fields in rows):
             return {"vendor": "nvidia", "status": "installed_but_broken", "runtime": {"cuda": "installed_but_broken"}}
 
-        def number(value: str) -> Optional[float]:
+        def number(value: str) -> float | None:
             return float(value) if value not in {"N/A", "[Not Supported]"} else None
 
         gpus = [{
@@ -98,12 +98,12 @@ class GPUProvider(HardwareProvider):
         return {**gpus[0], "gpus": gpus}
 
     @staticmethod
-    def _pci_gpu() -> Optional[Dict[str, Any]]:
+    def _pci_gpu() -> dict[str, Any] | None:
         if not shutil.which("lspci"):
             return None
         result = _run(["lspci", "-nn"])
         output = "" if result is None else result.stdout
-        gpu_lines = [line for line in output.splitlines() if re.search(r"(vga|3d controller|display controller)", line, re.I)]
+        gpu_lines = [line for line in output.splitlines() if re.search(r"(vga|3d controller|display controller)", line, re.IGNORECASE)]
         if not gpu_lines:
             return None
         gpus = []
@@ -121,7 +121,7 @@ class GPUProvider(HardwareProvider):
         return {**gpus[0], "gpus": gpus}
 
     @staticmethod
-    def detect() -> Dict[str, Any]:
+    def detect() -> dict[str, Any]:
         nvidia = GPUProvider._nvidia()
         if nvidia:
             return nvidia
@@ -135,7 +135,7 @@ class StorageProvider(HardwareProvider):
     MODEL_PATHS = ("/data/models", "/data/models/huggingface", "/data/models/ollama", "/var/lib/ollama", "~/.cache/huggingface", "~/.cache/torch", "~/.ollama")
 
     @staticmethod
-    def _mounts() -> List[Dict[str, Any]]:
+    def _mounts() -> list[dict[str, Any]]:
         mounts, seen = [], set()
         for partition in psutil.disk_partitions(all=False):
             if partition.mountpoint in seen:
@@ -149,7 +149,7 @@ class StorageProvider(HardwareProvider):
         return mounts
 
     @staticmethod
-    def detect() -> Dict[str, Any]:
+    def detect() -> dict[str, Any]:
         mounts = StorageProvider._mounts()
         if not any(item["mount_point"] == "/" for item in mounts):
             try:
@@ -178,7 +178,7 @@ class StorageProvider(HardwareProvider):
 
 class NetworkProvider(HardwareProvider):
     @staticmethod
-    def detect() -> Dict[str, Any]:
+    def detect() -> dict[str, Any]:
         addrs = psutil.net_if_addrs()
         counters = psutil.net_io_counters(pernic=True)
         interfaces = {}
@@ -190,7 +190,7 @@ class NetworkProvider(HardwareProvider):
 
 class SystemProvider(HardwareProvider):
     @staticmethod
-    def detect() -> Dict[str, Any]:
+    def detect() -> dict[str, Any]:
         try:
             boot_time = psutil.boot_time()
             uptime_seconds = max(0, round(time.time() - boot_time, 1))
@@ -201,7 +201,7 @@ class SystemProvider(HardwareProvider):
 
 class PowerProvider(HardwareProvider):
     @staticmethod
-    def detect() -> Dict[str, Any]:
+    def detect() -> dict[str, Any]:
         try:
             battery = psutil.sensors_battery()
         except (AttributeError, OSError):
@@ -218,6 +218,6 @@ class PowerProvider(HardwareProvider):
 
 class MemoryProvider(HardwareProvider):
     @staticmethod
-    def detect() -> Dict[str, Any]:
+    def detect() -> dict[str, Any]:
         mem, swap = psutil.virtual_memory(), psutil.swap_memory()
         return {"total_mb": round(mem.total / 1024**2, 2), "used_mb": round(mem.used / 1024**2, 2), "available_mb": round(mem.available / 1024**2, 2), "percent_used": mem.percent, "swap_total_mb": round(swap.total / 1024**2, 2), "swap_used_mb": round(swap.used / 1024**2, 2), "swap_free_mb": round(swap.free / 1024**2, 2), "swap_percent_used": swap.percent}

@@ -3,13 +3,12 @@ from __future__ import annotations
 import json
 import os
 import tempfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 from src.system.models.compatibility import HardwareCompatibilityEngine
 from src.system.telemetry import SystemTelemetryCollector
-
 
 SETUP_STEPS = ("welcome", "language", "network", "user", "hardware", "ai", "models", "finish")
 
@@ -24,13 +23,13 @@ RECOMMENDED_MODELS = (
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
 class SetupState:
     """Persist first-run choices without changing privileged system state."""
 
-    def __init__(self, path: Optional[Path | str] = None, telemetry: Optional[SystemTelemetryCollector] = None):
+    def __init__(self, path: Path | str | None = None, telemetry: SystemTelemetryCollector | None = None):
         requested = Path(path or os.environ.get("PROMETHEAN_SETUP_STATE", "/var/lib/promethean/setup.json")).expanduser().resolve()
         try:
             requested.parent.mkdir(parents=True, exist_ok=True)
@@ -41,14 +40,14 @@ class SetupState:
         self.telemetry = telemetry or SystemTelemetryCollector()
         self.compatibility = HardwareCompatibilityEngine(self.telemetry)
 
-    def read(self) -> Dict[str, Any]:
+    def read(self) -> dict[str, Any]:
         try:
             payload = json.loads(self.path.read_text(encoding="utf-8"))
             return payload if isinstance(payload, dict) else self._default()
         except (OSError, ValueError):
             return self._default()
 
-    def update(self, values: Dict[str, Any]) -> Dict[str, Any]:
+    def update(self, values: dict[str, Any]) -> dict[str, Any]:
         state = self.read()
         for key in ("step", "language", "keyboard", "network", "user", "ai", "models"):
             if key in values and isinstance(values[key], (str, bool, dict, list, type(None))):
@@ -59,10 +58,10 @@ class SetupState:
         self._write(state)
         return state
 
-    def complete(self, values: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def complete(self, values: dict[str, Any] | None = None) -> dict[str, Any]:
         return self.update({**(values or {}), "completed": True, "step": "finish"})
 
-    def snapshot(self) -> Dict[str, Any]:
+    def snapshot(self) -> dict[str, Any]:
         hardware = self.telemetry.snapshot(force=True)
         recommendations = []
         for model in RECOMMENDED_MODELS:
@@ -71,10 +70,10 @@ class SetupState:
             recommendations.append(item)
         return {"state": self.read(), "steps": SETUP_STEPS, "hardware": hardware, "recommendations": recommendations, "offline_completion": True}
 
-    def _default(self) -> Dict[str, Any]:
+    def _default(self) -> dict[str, Any]:
         return {"completed": False, "step": "welcome", "language": "en_US", "keyboard": "us", "network": {}, "user": {}, "ai": {"skipped": False}, "models": {}}
 
-    def _write(self, state: Dict[str, Any]) -> None:
+    def _write(self, state: dict[str, Any]) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         fd, temporary = tempfile.mkstemp(prefix="setup-", dir=self.path.parent)
         try:

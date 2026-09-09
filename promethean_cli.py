@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import argparse
-import os
 import shutil
 import subprocess
 import sys
@@ -33,10 +32,6 @@ except ImportError:  # pragma: no cover - fallback for minimal systems
         def __str__(self):
             return " | ".join(str(item) for item in self.rows[-1]) if self.rows else ""
 
-    Console = Console
-    Panel = Panel
-    Table = Table
-
 console = Console()
 
 
@@ -60,10 +55,10 @@ def check_kernel():
 def check_gpu():
     gpu = "Unknown"
     if shutil.which('nvidia-smi'):
-        code, out, _ = run_cmd(['nvidia-smi'])
+        _, out, _ = run_cmd(['nvidia-smi'])
         gpu = out.splitlines()[0] if out else 'NVIDIA GPU detected'
     elif shutil.which('lspci'):
-        code, out, _ = run_cmd(['lspci'])
+        _, out, _ = run_cmd(['lspci'])
         if 'NVIDIA' in out or 'nvidia' in out:
             gpu = 'NVIDIA (lspci)'
         elif 'AMD' in out or 'Radeon' in out or 'AMD' in out:
@@ -84,7 +79,7 @@ def check_driver_status():
         ('Podman', ['podman', '--version']),
         ('Docker', ['docker', '--version']),
     ]:
-        code, out, err = run_cmd(cmd)
+        code, _, _ = run_cmd(cmd)
         status.append((name, 'OK' if code == 0 else 'MISSING'))
     return dict(status)
 

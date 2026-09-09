@@ -3,7 +3,7 @@ from __future__ import annotations
 import importlib.util
 import shutil
 import subprocess
-from typing import Any, Dict, Optional
+from typing import Any
 
 from .providers import GPUProvider, StorageProvider
 
@@ -13,7 +13,7 @@ NOT_INSTALLED = "NOT_INSTALLED"
 UNSUPPORTED = "UNSUPPORTED"
 
 
-def _module_status(module: str, probe: Optional[str] = None) -> str:
+def _module_status(module: str, probe: str | None = None) -> str:
     if importlib.util.find_spec(module) is None:
         return NOT_INSTALLED
     if not probe:
@@ -25,7 +25,7 @@ def _module_status(module: str, probe: Optional[str] = None) -> str:
     return AVAILABLE if result.returncode == 0 else INSTALLED_BUT_BROKEN
 
 
-def _binary_status(binary: str, args: Optional[list[str]] = None) -> str:
+def _binary_status(binary: str, args: list[str] | None = None) -> str:
     path = shutil.which(binary)
     if not path:
         return NOT_INSTALLED
@@ -39,7 +39,7 @@ def _binary_status(binary: str, args: Optional[list[str]] = None) -> str:
 class CapabilityEngine:
     """Build a read-only, machine-readable summary of AI capabilities."""
 
-    def detect_runtimes(self) -> Dict[str, str]:
+    def detect_runtimes(self) -> dict[str, str]:
         return {
             "python": _binary_status("python3", ["--version"]),
             "pytorch": _module_status("torch", "import torch; print(torch.__version__)"),
@@ -55,7 +55,7 @@ class CapabilityEngine:
             "podman": _binary_status("podman", ["--version"]),
         }
 
-    def detect(self) -> Dict[str, Any]:
+    def detect(self) -> dict[str, Any]:
         gpu = GPUProvider.detect()
         runtimes = self.detect_runtimes()
         storage = StorageProvider.detect()

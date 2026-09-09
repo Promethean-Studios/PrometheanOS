@@ -2,14 +2,13 @@ from __future__ import annotations
 
 import json
 import mimetypes
-from pathlib import Path
-from urllib.parse import parse_qs, unquote, urlparse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from threading import Event
-from typing import Any, Dict, Optional
+from typing import Any
+from urllib.parse import parse_qs, unquote, urlparse
 
 from src.system.services.promethean_service import PrometheanService
-
 
 CONTROL_CENTER_ROOT = Path(__file__).resolve().parents[2] / "desktop" / "control-center"
 SETUP_ROOT = Path(__file__).resolve().parents[2] / "desktop" / "setup"
@@ -117,7 +116,7 @@ class PrometheanRequestHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         return
 
-    def _send_json(self, payload: Dict[str, Any], status: int = 200):
+    def _send_json(self, payload: dict[str, Any], status: int = 200):
         body = json.dumps(payload).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
@@ -146,7 +145,7 @@ class PrometheanRequestHandler(BaseHTTPRequestHandler):
 
 
 class LocalPrometheanAPI:
-    def __init__(self, service: Optional[PrometheanService] = None, host: str = "127.0.0.1", port: int = 8765):
+    def __init__(self, service: PrometheanService | None = None, host: str = "127.0.0.1", port: int = 8765):
         self.service = service or PrometheanService()
         self.host = host
         self.port = port

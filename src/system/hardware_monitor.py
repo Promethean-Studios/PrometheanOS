@@ -1,7 +1,7 @@
 import json
 import shutil
 import subprocess
-from typing import Any, Dict, List
+from typing import Any, ClassVar
 
 import psutil
 
@@ -9,7 +9,7 @@ import psutil
 class HardwareMonitor:
     """Collect hardware telemetry for the Promethean Control Center."""
 
-    AI_PROCESS_NAMES = {
+    AI_PROCESS_NAMES: ClassVar[set[str]] = {
         "ollama",
         "llama",
         "llama.cpp",
@@ -30,7 +30,7 @@ class HardwareMonitor:
         if not temps:
             return 0.0
 
-        readings: List[float] = []
+        readings: list[float] = []
         for entries in temps.values():
             for item in entries or []:
                 if getattr(item, "current", None) is not None:
@@ -42,7 +42,7 @@ class HardwareMonitor:
         return sum(readings) / len(readings)
 
     @staticmethod
-    def get_vram_usage_mb() -> Dict[str, float]:
+    def get_vram_usage_mb() -> dict[str, float]:
         if shutil.which("nvidia-smi"):
             try:
                 completed = subprocess.run(
@@ -73,8 +73,8 @@ class HardwareMonitor:
         }
 
     @staticmethod
-    def detect_ai_workloads() -> List[Dict[str, Any]]:
-        workloads: List[Dict[str, Any]] = []
+    def detect_ai_workloads() -> list[dict[str, Any]]:
+        workloads: list[dict[str, Any]] = []
         for proc in psutil.process_iter(["pid", "name", "cmdline", "memory_info"]):
             try:
                 info = proc.info
@@ -95,7 +95,7 @@ class HardwareMonitor:
                     memory_mb = float(rss.get("rss", 0)) / (1024 * 1024)
                 else:
                     memory_mb = getattr(rss, "rss", 0) / (1024 * 1024) if rss else 0.0
-            except Exception:
+            except Exception:  # noqa: BLE001 - probe failure must degrade to unknown, never abort collection
                 memory_mb = 0.0
 
             workloads.append(
@@ -110,7 +110,7 @@ class HardwareMonitor:
         return workloads
 
     @staticmethod
-    def snapshot() -> Dict[str, Any]:
+    def snapshot() -> dict[str, Any]:
         cpu = psutil.cpu_percent(interval=None)
         memory = psutil.virtual_memory()
         return {
