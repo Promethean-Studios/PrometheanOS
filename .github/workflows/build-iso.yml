@@ -2,6 +2,11 @@ name: Build PrometheanOS ISO
 
 on:
   workflow_dispatch:
+  # Branch-scoped push trigger: keeps the build→boot-test loop running on
+  # this fix branch. workflow_dispatch remains for manual runs elsewhere.
+  push:
+    branches:
+      - fix/iso-build-pipeline
 
 jobs:
   build-iso:
