@@ -30,7 +30,12 @@ if [[ ! -f "$KICKSTART_FILE" ]]; then
   echo "Kickstart file not found: $KICKSTART_FILE" >&2
   exit 1
 fi
-TEMP_RESULT_ROOT="$(mktemp -d "$REPO_ROOT/.promethean-live-XXXXXX")"
+# The temp result root MUST live OUTSIDE $REPO_ROOT: with --no-virt the
+# container's /workspace IS the repo dir, and the kickstart %post --nochroot
+# `cp -a /workspace/.` would otherwise pull this directory (including lmc's
+# multi-GB disk image and result files) into the image, exhausting the target
+# filesystem ("No space left on device", CI run 34522793350).
+TEMP_RESULT_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/promethean-live-XXXXXX")"
 # Root-owned files can appear inside the temp result root (created by the
 # rootful container), so fall back to sudo for cleanup; best effort only.
 trap 'rm -rf "$TEMP_RESULT_ROOT" 2>/dev/null || sudo -n rm -rf "$TEMP_RESULT_ROOT" 2>/dev/null || true' EXIT
@@ -143,8 +148,11 @@ if [[ $podman_rc -ne 0 ]]; then
   # echoed explicitly - it must never fail silently.
   mkdir -p "$OUTPUT_DIR/build-logs/anaconda"
   if [[ -d "$REPO_ROOT/anaconda" ]]; then
+    # Anaconda logs in the bind view are root-owned (rootful container wrote
+    # them through the mount); retry with sudo so this cp never fails noisy.
     cp -a "$REPO_ROOT/anaconda/." "$OUTPUT_DIR/build-logs/anaconda/" \
-      || echo "warning: cp of $REPO_ROOT/anaconda failed" >&2
+      || "${RUN_AS_ROOT[@]}" cp -a "$REPO_ROOT/anaconda/." "$OUTPUT_DIR/build-logs/anaconda/" \
+      || echo "warning: cp of $REPO_ROOT/anaconda failed (plain and sudo)" >&2
   else
     echo "note: no anaconda logs at $REPO_ROOT/anaconda (anaconda may not have started)" >&2
   fi
@@ -153,7 +161,8 @@ if [[ $podman_rc -ne 0 ]]; then
   shopt -u nullglob
   if (( ${#repo_logs[@]} > 0 )); then
     cp -a "${repo_logs[@]}" "$OUTPUT_DIR/build-logs/" \
-      || echo "warning: cp of repo-side build logs failed" >&2
+      || "${RUN_AS_ROOT[@]}" cp -a "${repo_logs[@]}" "$OUTPUT_DIR/build-logs/" \
+      || echo "warning: cp of repo-side build logs failed (plain and sudo)" >&2
   else
     echo "note: no repo-side build logs (*.log) in $REPO_ROOT" >&2
   fi

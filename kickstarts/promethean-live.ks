@@ -55,7 +55,10 @@ kernel-modules
 set -eu
 install -d -m 0755 /mnt/sysimage/srv/promethean
 cp -a /workspace/. /mnt/sysimage/srv/promethean/
-rm -rf /mnt/sysimage/srv/promethean/.git /mnt/sysimage/srv/promethean/.pytest_cache /mnt/sysimage/srv/promethean/__pycache__
+# The rm also sweeps build debris: build.sh's temp result root was once inside
+# the repo (now /tmp), and any future in-repo output dir (build/) must never be
+# baked into the image (CI run 34522793350: 12 GB disk image copied into target).
+rm -rf /mnt/sysimage/srv/promethean/.git /mnt/sysimage/srv/promethean/.pytest_cache /mnt/sysimage/srv/promethean/__pycache__ /mnt/sysimage/srv/promethean/.promethean-live-* /mnt/sysimage/srv/promethean/build
 %end
 
 %post --log=/root/promethean-post.log --erroronfail
