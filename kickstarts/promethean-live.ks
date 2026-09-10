@@ -27,6 +27,9 @@ user --name=promethean --groups=wheel --shell=/bin/bash
 @fonts
 @networkmanager-submodules
 NetworkManager-wifi
+# SDDM is the configured display manager (see /etc/sddm.conf.d autologin) and is not implied by the KDE environment group on F44.
+sddm
+sddm-wayland-plasma
 pciutils
 firewalld
 git
