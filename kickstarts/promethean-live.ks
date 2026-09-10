@@ -15,7 +15,8 @@ rootpw --lock
 # livemedia-creator --no-virt --make-iso requires a single / part to size the
 # rootfs image (calculate_disk_size raises "No / partition in the kickstart"
 # without it). Same pattern as lorax's own fedora-livemedia.ks example.
-part / --size=8192
+# 12288 MiB: anaconda requires the transaction to fit the / filesystem and the full KDE live set installs ~8.9 GB (run 34403642413: dnf "needs 720MB more space" at 8192); the ISO payload is squashfs-compressed, so this only affects build-time disk on a sparse image.
+part / --size=12288
 user --name=promethean --groups=wheel --shell=/bin/bash
 
 %packages

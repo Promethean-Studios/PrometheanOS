@@ -92,14 +92,23 @@ if [[ $lmc_rc -ne 0 ]]; then
        -printf '%s\t%p\n' 2>/dev/null | sort -rn > "$dest/inventory.txt" || true
   echo "==== build log inventory (bytes, path) ===="
   cat "$dest/inventory.txt" || true
-  tar -C / -cf "$dest/logs.tar" \
-      var/log/anaconda \
-      tmp/lmc-logs tmp/anaconda.log tmp/packaging.log tmp/program.log \
-      tmp/storage.log tmp/syslog tmp/livemedia-creator.log \
-      workspace/livemedia-creator.log \
-      >"$dest/tar-errors.txt" 2>&1 || true
-  echo "==== tar capture errors (missing members are expected) ====" >&2
-  cat "$dest/tar-errors.txt" >&2 || true
+  # Capture with cp -a and container-ABSOLUTE paths instead of `tar -C /` with
+  # relative members: the old tar produced an EMPTY logs.tar ("var/log/anaconda:
+  # Cannot stat" in tar-errors.txt, run 34402353556) because the anaconda logs
+  # actually land under /workspace/anaconda (the bind-mounted repo root), not
+  # /var/log/anaconda. /tmp/live-root is bind-mounted to the host's temp result
+  # dir, so everything staged here survives the --rm container.
+  cp -a /workspace/anaconda "$dest/anaconda" \
+    || echo "warning: /workspace/anaconda not found (anaconda may not have started)" >&2
+  shopt -s nullglob
+  workspace_logs=(/workspace/*.log)
+  shopt -u nullglob
+  if (( ${#workspace_logs[@]} > 0 )); then
+    cp -a "${workspace_logs[@]}" "$dest/" \
+      || echo "warning: failed to copy /workspace/*.log build logs" >&2
+  else
+    echo "note: no *.log files in /workspace (repo root)" >&2
+  fi
   awk '{print $2}' "$dest/inventory.txt" 2>/dev/null | while IFS= read -r f; do
     case "$f" in "$dest"/*|*build-lmc.log|*.tar) continue;; esac
     echo "===== tail of $f ====="
@@ -123,19 +132,46 @@ podman_rc=0
   "$CONTAINER_IMAGE" \
   bash -lc "$CONTAINER_SCRIPT" || podman_rc=$?
 if [[ $podman_rc -ne 0 ]]; then
-  # The container copies its anaconda/lmc logs into the mounted temp result
-  # root before exiting (see CONTAINER_SCRIPT above). Preserve them under the
-  # output dir BEFORE the EXIT trap deletes the temp root: without this every
-  # transaction failure is undiagnosable from CI artifacts alone. Files are
-  # root-owned by the rootful container, so the copy needs the same sudo
-  # fallback as the cleanup trap.
-  mkdir -p "$OUTPUT_DIR/build-logs"
-  "${RUN_AS_ROOT[@]}" tar -xf "$TEMP_RESULT_ROOT/build-logs/logs.tar" -C "$OUTPUT_DIR/build-logs/" 2>/dev/null \
-    || echo "warning: no logs.tar to extract (see tar-errors.txt / inventory in the console log)" >&2
-  "${RUN_AS_ROOT[@]}" cp -a "$TEMP_RESULT_ROOT/build-logs/." "$OUTPUT_DIR/build-logs/" \
-    || echo "warning: could not copy build logs out of $TEMP_RESULT_ROOT/build-logs" >&2
+  # Failure-log capture, host side, ALL paths absolute/anchored so the
+  # wrong-cwd bug that produced an empty logs.tar (run 34402353556) cannot
+  # recur. The container's /workspace is the bind mount of $REPO_ROOT, so
+  # anaconda's logs (packaging.log, program.log, ...) written to
+  # /workspace/anaconda in the container are already on the host at
+  # "$REPO_ROOT/anaconda" the moment the container exits. Copy them into the
+  # output dir BEFORE the EXIT trap deletes the temp result root. This handler
+  # only runs on failure, so every step is guarded and what was captured is
+  # echoed explicitly - it must never fail silently.
+  mkdir -p "$OUTPUT_DIR/build-logs/anaconda"
+  if [[ -d "$REPO_ROOT/anaconda" ]]; then
+    cp -a "$REPO_ROOT/anaconda/." "$OUTPUT_DIR/build-logs/anaconda/" \
+      || echo "warning: cp of $REPO_ROOT/anaconda failed" >&2
+  else
+    echo "note: no anaconda logs at $REPO_ROOT/anaconda (anaconda may not have started)" >&2
+  fi
+  shopt -s nullglob
+  repo_logs=("$REPO_ROOT"/*.log)
+  shopt -u nullglob
+  if (( ${#repo_logs[@]} > 0 )); then
+    cp -a "${repo_logs[@]}" "$OUTPUT_DIR/build-logs/" \
+      || echo "warning: cp of repo-side build logs failed" >&2
+  else
+    echo "note: no repo-side build logs (*.log) in $REPO_ROOT" >&2
+  fi
+  # Whatever the container staged into the mounted result dir (inventory.txt,
+  # its own cp of /workspace/anaconda). Root-owned by the rootful container,
+  # so the copy needs the same sudo fallback as the cleanup trap.
+  if [[ -d "$TEMP_RESULT_ROOT/build-logs" ]]; then
+    "${RUN_AS_ROOT[@]}" cp -a "$TEMP_RESULT_ROOT/build-logs/." "$OUTPUT_DIR/build-logs/" \
+      || echo "warning: could not copy staged logs from $TEMP_RESULT_ROOT/build-logs" >&2
+  else
+    echo "note: container staged nothing into $TEMP_RESULT_ROOT/build-logs" >&2
+  fi
   "${RUN_AS_ROOT[@]}" chmod -R a+rX "$OUTPUT_DIR/build-logs" 2>/dev/null || true
-  echo "ISO build failed (container exit $podman_rc). Preserved logs: $OUTPUT_DIR/build-logs/" >&2
+  echo "ISO build failed (container exit $podman_rc). Captured failure logs:" >&2
+  find "$OUTPUT_DIR/build-logs" -type f -printf '%s\t%p\n' 2>/dev/null | sort -rn >&2
+  echo "==== captured build-log inventory (bytes, path) ====" >&2
+  cat "$OUTPUT_DIR/build-logs/inventory.txt" >&2 \
+    || echo "(no inventory.txt captured; rely on the console output above)" >&2
   exit "$podman_rc"
 fi
 
