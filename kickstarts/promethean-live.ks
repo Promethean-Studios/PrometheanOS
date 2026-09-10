@@ -98,6 +98,8 @@ export OLLAMA_MODELS=/data/models/ollama
 export XDG_CACHE_HOME=/data/models/cache
 export PYTHONUNBUFFERED=1
 EOF
+# F44's KDE stack ships display-manager.service as a symlink to plasmalogin.service; systemctl enable sddm will not clobber an existing alias, so remove the symlink first and let `systemctl enable sddm` re-point it (run 34527416500 evidence)
+rm -f /etc/systemd/system/display-manager.service
 systemctl enable NetworkManager firewalld sddm promethean-api.service promethean-hardware-detect.service promethean-ollama.service
 systemctl set-default graphical.target
 %end
