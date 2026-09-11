@@ -1,6 +1,7 @@
 # First testable PrometheanOS Fedora KDE live image.
 # This file is consumed by livemedia-creator --make-iso (virt install). It
-# initializes lmc's disposable installer-VM disk (zerombr + clearpart --all)
+# initializes lmc's disposable installer-VM disk (zerombr + clearpart --all,
+# plus a 1MiB biosboot partition for BIOS boot from the resulting GPT label)
 # and contains no bootloader, autopart, or reboot directives.
 
 url --mirrorlist="https://mirrors.fedoraproject.org/metalink?repo=fedora-${releasever}&arch=$basearch"
@@ -32,6 +33,8 @@ rootpw --lock
 zerombr
 clearpart --all
 part / --size=12288
+# run 34649815500: anaconda initializes the blank lmc virt disk as GPT; the installer VM boots BIOS/SeaBIOS, and BIOS boot from GPT requires a 1MiB biosboot partition (verify_gpt_biosboot sanity check failed: "Your BIOS-based system needs a special partition to boot from a GPT disk label"). This partition exists only on the throwaway installer-VM disk; the ISO is composed from the installed tree's squashfs, so ISO content is unchanged.
+part biosboot --fstype=biosboot --size=1
 # livemedia-creator's virt install only sees qemu exit when anaconda powers
 # the VM off; without `shutdown` the VM resets and lmc waits forever
 # (pylorax LogMonitor has no completion signal without it). Same directive as
