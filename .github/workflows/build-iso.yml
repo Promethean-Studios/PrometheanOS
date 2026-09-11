@@ -2,11 +2,19 @@ name: Build PrometheanOS ISO
 
 on:
   workflow_dispatch:
+  # Branch-scoped push trigger: keeps the build→boot-test loop running on
+  # this fix branch. workflow_dispatch remains for manual runs elsewhere.
+  push:
+    branches:
+      - fix/iso-build-pipeline
 
 jobs:
   build-iso:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    # ISO build (~30-60 min, anaconda --no-virt) + QEMU TCG boot test.
+    # TCG has no KVM, so a Plasma boot takes several minutes; 110 min keeps
+    # the job under the ~2h budget with margin.
+    timeout-minutes: 110
     steps:
       - name: Check out code
         uses: actions/checkout@v4
@@ -20,8 +28,41 @@ jobs:
             slirp4netns \
             uidmap
 
+      - name: Probe host loop environment
+        # Root-cause context for the losetup failure in run 34311360230: GitHub
+        # runner hosts have the loop module loaded (snapd holds dozens of loop
+        # mounts) and /dev/loop-control present, so the failure was inside the
+        # rootless podman container, not on the host. Keep this step cheap and
+        # non-fatal; it exists so future run logs always carry the host loop
+        # state next to any losetup error.
+        run: |
+          echo "== loop module =="; grep '^loop ' /proc/modules || echo "loop module NOT loaded"
+          echo "== /dev/loop-control =="; ls -l /dev/loop-control || echo "missing"
+          echo "== loop devices in use =="; losetup -l 2>/dev/null | head -5 || true
+          echo "total in use: $(losetup -l 2>/dev/null | tail -n +2 | wc -l)"
+
       - name: Build ISO
-        run: ./build.sh
+        # shell: bash implies -eo pipefail, so the tee cannot mask a build.sh
+        # failure; the tee'd copy keeps the lmc/anaconda console output next to
+        # the artifact logs for debugging.
+        shell: bash
+        run: |
+          mkdir -p build
+          ./build.sh 2>&1 | tee build/build-lmc.log
+      - name: Upload build failure logs
+        # On a transaction failure anaconda prints only a generic message to
+        # the console; the per-package/scriptlet detail exists solely in log
+        # files from inside the (now removed) build container. build.sh copies
+        # those to build/output/build-logs/ on failure. Success runs upload
+        # nothing (if-no-files-found: ignore keeps this lean).
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: |
+            build/output/build-logs/
+            build/build-lmc.log
+          if-no-files-found: ignore
 
       - name: Verify ISO output
         run: |
@@ -29,6 +70,32 @@ jobs:
             echo "ISO was not produced at build/output/PrometheanOS-KDE.iso" >&2
             exit 1
           fi
+
+      - name: Install QEMU boot-test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86 ovmf
+
+      - name: QEMU boot smoke test
+        # The smoke-test script owns the QEMU invocation; it also asserts that
+        # the serial log shows real boot evidence when
+        # PROMETHEAN_ASSERT_MARKER is set. TCG (no KVM on runners) is slow, so
+        # give the Plasma boot a generous 600s window.
+        env:
+          BOOT_SECONDS: 600
+          RAM_MB: 4096
+          CPUS: 4
+          SERIAL_LOG: ${{ github.workspace }}/build/qemu-serial.log
+          PROMETHEAN_ASSERT_MARKER: "Reached target Graphical Interface,SDDM"
+        run: ./scripts/qemu-smoke-test.sh build/output/PrometheanOS-KDE.iso
+
+      - name: Upload QEMU serial log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qemu-serial-log
+          path: build/qemu-serial.log
+          if-no-files-found: ignore
 
       - name: Upload ISO artifact
         uses: actions/upload-artifact@v4

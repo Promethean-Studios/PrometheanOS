@@ -10,7 +10,12 @@ def test_live_build_contract_is_self_contained():
     assert "promethean-live.ks" in build
     assert "--make-iso" in build
     directives = {line.split(maxsplit=1)[0] for line in live.splitlines() if line and not line.startswith("#")}
-    assert "clearpart" not in directives
+    # zerombr + clearpart --all initialize lmc's disposable installer-VM disk;
+    # without them anaconda leaves the blank disk unlabeled and blivet's
+    # do_partitioning fails with disks=[] (run 34647960864). They affect only
+    # the build-time VM disk, not the ISO.
+    assert "zerombr" in directives
+    assert "clearpart" in directives
     assert "autopart" not in directives
     assert "reboot" not in directives
     assert "/srv/promethean" in live
