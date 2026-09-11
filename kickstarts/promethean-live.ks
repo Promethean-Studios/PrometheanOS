@@ -18,7 +18,7 @@ rootpw --lock
 # (calculate_disk_size raises "No / partition in the kickstart" without it)
 # and anaconda creates it inside the installer VM. Same pattern as lorax's
 # own fedora-livemedia.ks example.
-# 12288 MiB: anaconda requires the transaction to fit the / filesystem and the full KDE live set installs ~8.9 GB (run 34403642413: dnf "needs 720MB more space" at 8192); the ISO payload is squashfs-compressed, so this only affects build-time disk on a sparse image.
+# 16384 MiB: anaconda requires the transaction to fit the / filesystem; run 34653122316 failed with "needs ~1477MB more space on the / filesystem" at 12288 because the network metalink payload (updates-released included) needs ~13.5 GB, up from ~8.9 GB at the release cut (run 34403642413). The ISO payload is squashfs-compressed, so this only affects build-time disk on a sparse image.
 # The virt install runs anaconda against a blank virtual disk (auto-sized to
 # 12290 MiB from the part line below). Without a disk-init directive anaconda
 # refuses to initialize it (disk_initialization.can_initialize: "The disk
@@ -32,7 +32,7 @@ rootpw --lock
 # installed tree's squashfs, so nothing in the image changes.
 zerombr
 clearpart --all
-part / --size=12288
+part / --size=16384
 # run 34649815500: anaconda initializes the blank lmc virt disk as GPT; the installer VM boots BIOS/SeaBIOS, and BIOS boot from GPT requires a 1MiB biosboot partition (verify_gpt_biosboot sanity check failed: "Your BIOS-based system needs a special partition to boot from a GPT disk label"). This partition exists only on the throwaway installer-VM disk; the ISO is composed from the installed tree's squashfs, so ISO content is unchanged.
 part biosboot --fstype=biosboot --size=1
 # livemedia-creator's virt install only sees qemu exit when anaconda powers
