@@ -68,12 +68,15 @@ if (( iso_size < 700 * 1024 * 1024 )); then
   exit 1
 fi
 
-# The installer VM cannot see the host repo: lmc injects only the kickstart
-# (and any extra files passed as additional --ks arguments) into the VM's
-# initrd cpio (pylorax QEMUInstall: "All are injected, the first one is the
-# one executed"). Ship the repo payload as a tarball next to the kickstart;
-# the %post --nochroot in kickstarts/promethean-live.ks extracts it into the
-# target system. Exclusions mirror the %post cleanup of build debris.
+# The installer VM cannot see the host repo. Ship the repo payload as
+# payload.tar.gz in the temp result root: the container serves it over HTTP
+# (127.0.0.1:8099, reachable from the VM as 10.0.2.2) and the kickstart's
+# %post --nochroot fetches it - local-file/initrd candidates are tried first
+# as opportunistic fast paths. Passing the tarball as an extra --ks also
+# injects it into the install initrd, but that is NOT a guaranteed channel:
+# initrd-root files do not survive dracut's switch_root into the stage2
+# runtime (run 34655074847: %post FATAL with only initrd injection).
+# Exclusions mirror the %post cleanup of build debris.
 tar -C "$REPO_ROOT" \
     --exclude=./.git --exclude=./build --exclude=./anaconda \
     -czf "$TEMP_RESULT_ROOT/payload.tar.gz" .
@@ -89,7 +92,14 @@ set -euo pipefail
 # retired --no-virt path (anaconda ran directly in the container; setfiles is
 # only invoked by pylorax novirt_install). edk2-ovmf is not needed: the VM
 # boots BIOS/SeaBIOS by default (no --virt-uefi).
-dnf -y install qemu-system-x86-core qemu-img lorax livemedia-creator isomd5sum pykickstart
+dnf -y install qemu-system-x86-core qemu-img lorax livemedia-creator isomd5sum pykickstart python3
+# Serve the temp result root over HTTP for the installer VM: the kickstart
+# %post fetches payload.tar.gz from the build host via qemu user networking
+# (fixed slirp gateway 10.0.2.2). Initrd-injected files (extra --ks args) do
+# NOT survive dracut's switch_root into the stage2 runtime (run 34655074847),
+# so this server is the guaranteed delivery channel.
+python3 -m http.server 8099 --directory /tmp/live-root >/tmp/live-root/http-server.log 2>&1 &
+HTTP_SERVER_PID=$!
 lmc_rc=0
 livemedia-creator \
   --make-iso \
@@ -105,6 +115,7 @@ livemedia-creator \
   --iso-name="PrometheanOS-KDE.iso" \
   --project="PrometheanOS" \
   --releasever="$FEDORA_RELEASE" || lmc_rc=$?
+kill "$HTTP_SERVER_PID" 2>/dev/null || true
 if [[ $lmc_rc -ne 0 ]]; then
   # On failure anaconda prints only a generic message to stdout; the
   # per-package/scriptlet error detail exists ONLY in log files (somewhere

@@ -94,19 +94,34 @@ efibootmgr
 %post --nochroot --log=/mnt/sysimage/root/promethean-copy.log --erroronfail
 set -eu
 install -d -m 0755 /mnt/sysimage/srv/promethean
-# The virt install VM has no /workspace (lmc injects only the kickstart and
-# the extra --ks files into the VM's initrd). The repo payload arrives as
-# payload.tar.gz at the initrd root; the anaconda installer runtime ships
-# tar (lorax runtime-install.tmpl: installpkg tar xz curl bzip2).
-# A /workspace bind mount only exists in container-direct builds, which are
-# kept as a fallback.
+# Repo payload delivery into the installer VM's runtime:
+# 1. lmc injects extra --ks files into the install initrd, but initrd-root
+#    files do NOT survive dracut's switch_root into the stage2 runtime
+#    (run 34655074847: /payload.tar.gz absent at %post). Local candidates
+#    are kept as opportunistic fast paths in case injected files land in
+#    /run/install.
+# 2. A /workspace bind mount exists only in container-direct builds (retired).
+# 3. Guaranteed channel: build.sh serves the temp result root on 127.0.0.1:8099
+#    while lmc runs; the VM reaches it via qemu user networking at 10.0.2.2
+#    (fixed slirp gateway, confirmed in the run's qemu cmdline). The anaconda
+#    runtime ships curl (lorax runtime-install.tmpl) and the NIC is up - the
+#    package transaction itself resolved from the network metalink.
+ls -la / /run/install/ 2>/dev/null || true
+payload=""
 if [[ -s /payload.tar.gz ]]; then
-    tar -xzf /payload.tar.gz -C /mnt/sysimage/srv/promethean/
+    payload=/payload.tar.gz
+elif [[ -s /run/install/payload.tar.gz ]]; then
+    payload=/run/install/payload.tar.gz
 elif [[ -d /workspace ]]; then
     cp -a /workspace/. /mnt/sysimage/srv/promethean/
 else
-    echo "FATAL: no repo payload found (expected /payload.tar.gz or /workspace)" >&2
-    exit 1
+    curl -fsSL --retry 5 --retry-delay 2 --connect-timeout 5 \
+        -o /tmp/promethean-payload.tar.gz http://10.0.2.2:8099/payload.tar.gz \
+        || { echo "FATAL: payload fetch from build host (10.0.2.2:8099) failed" >&2; exit 1; }
+    payload=/tmp/promethean-payload.tar.gz
+fi
+if [[ -n "$payload" ]]; then
+    tar -xzf "$payload" -C /mnt/sysimage/srv/promethean/
 fi
 # The rm also sweeps build debris: build.sh's temp result root was once inside
 # the repo (now /tmp), and any future in-repo output dir (build/) must never be
