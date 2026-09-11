@@ -6,6 +6,11 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OUTPUT_DIR="${OUTPUT_DIR:-$REPO_ROOT/build/output}"
 KICKSTART_FILE="${KICKSTART_FILE:-$REPO_ROOT/kickstarts/promethean-live.ks}"
 FEDORA_RELEASE="${FEDORA_RELEASE:-44}"
+# FEDORA_RELEASE and FEDORA_INSTALL_ISO_URL must be bumped together: the
+# netinst ISO filename embeds the release number. If the URL points at an
+# existing local file it is used directly and the download is skipped (this
+# is how CI caching can reuse one installer ISO across runs).
+FEDORA_INSTALL_ISO_URL="${FEDORA_INSTALL_ISO_URL:-https://download.fedoraproject.org/pub/fedora/linux/releases/44/Server/x86_64/iso/Fedora-Server-netinst-x86_64-44-1.7.iso}"
 CONTAINER_IMAGE="${CONTAINER_IMAGE:-quay.io/fedora/fedora:${FEDORA_RELEASE}}"
 mkdir -p "$(dirname "$OUTPUT_DIR")"
 rm -rf "$OUTPUT_DIR"
@@ -15,12 +20,13 @@ if ! command -v podman >/dev/null 2>&1; then
   exit 1
 fi
 # The container MUST run rootful (prefix with sudo when we are not root):
-# livemedia-creator --no-virt attaches the disk image with `losetup --find
-# --show`, and losetup only works for callers with privileges in the INITIAL
-# user namespace. Host /dev/loopN nodes are owned by real root:disk, which is
-# unmapped inside a rootless podman user namespace, and --privileged cannot
-# lift that without real root. This is what killed CI run 34311360230
-# (losetup exit 1 after the full dnf install) when podman ran rootless.
+# livemedia-creator loop-mounts the Anaconda installer ISO (pylorax
+# IsoMountpoint) with `mount -o loop`, and losetup only works for callers
+# with privileges in the INITIAL user namespace. Host /dev/loopN nodes are
+# owned by real root:disk, which is unmapped inside a rootless podman user
+# namespace, and --privileged cannot lift that without real root. This is
+# what killed CI run 34311360230 (losetup exit 1 after the full dnf install)
+# when podman ran rootless.
 if [[ ${EUID} -eq 0 ]]; then
   RUN_AS_ROOT=()
 else
@@ -30,50 +36,70 @@ if [[ ! -f "$KICKSTART_FILE" ]]; then
   echo "Kickstart file not found: $KICKSTART_FILE" >&2
   exit 1
 fi
-# The temp result root MUST live OUTSIDE $REPO_ROOT: with --no-virt the
-# container's /workspace IS the repo dir, and the kickstart %post --nochroot
-# `cp -a /workspace/.` would otherwise pull this directory (including lmc's
-# multi-GB disk image and result files) into the image, exhausting the target
-# filesystem ("No space left on device", CI run 34522793350).
+# The temp result root MUST live OUTSIDE $REPO_ROOT: the container's
+# /workspace IS the repo dir, and the downloaded installer ISO plus lmc's
+# multi-GB result files must never be pulled into the repo tree (and the
+# kickstart %post must never copy build debris into the image; CI run
+# 34522793350: 12 GB disk image copied into target).
 TEMP_RESULT_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/promethean-live-XXXXXX")"
 # Root-owned files can appear inside the temp result root (created by the
 # rootful container), so fall back to sudo for cleanup; best effort only.
 trap 'rm -rf "$TEMP_RESULT_ROOT" 2>/dev/null || sudo -n rm -rf "$TEMP_RESULT_ROOT" 2>/dev/null || true' EXIT
+
+# The virt install boots a Fedora Anaconda installer ISO in qemu and installs
+# from it; livemedia-creator refuses the virt path without --iso
+# ("virt install needs an install iso.", CI run 34643351339). The ISO is
+# fetched onto the HOST into the temp result root (volume-mounted at
+# /tmp/live-root in the container) - never into the repo tree. If
+# FEDORA_INSTALL_ISO_URL is an existing local file it is used directly and
+# the download is skipped (idempotent, enables CI caching later).
+INSTALLER_ISO="$TEMP_RESULT_ROOT/installer.iso"
+if [[ -f "$FEDORA_INSTALL_ISO_URL" ]]; then
+  echo "FEDORA_INSTALL_ISO_URL is a local file; using it directly: $FEDORA_INSTALL_ISO_URL"
+  cp -f "$FEDORA_INSTALL_ISO_URL" "$INSTALLER_ISO"
+else
+  echo "Downloading Fedora installer ISO: $FEDORA_INSTALL_ISO_URL"
+  curl -fSL --retry 3 -o "$INSTALLER_ISO" "$FEDORA_INSTALL_ISO_URL"
+fi
+iso_size="$(stat -c%s "$INSTALLER_ISO")"
+if (( iso_size < 700 * 1024 * 1024 )); then
+  echo "FATAL: installer ISO is only ${iso_size} bytes (expected >= 700 MiB)." >&2
+  echo "The download was truncated or FEDORA_INSTALL_ISO_URL is wrong: $FEDORA_INSTALL_ISO_URL" >&2
+  exit 1
+fi
+
+# The installer VM cannot see the host repo: lmc injects only the kickstart
+# (and any extra files passed as additional --ks arguments) into the VM's
+# initrd cpio (pylorax QEMUInstall: "All are injected, the first one is the
+# one executed"). Ship the repo payload as a tarball next to the kickstart;
+# the %post --nochroot in kickstarts/promethean-live.ks extracts it into the
+# target system. Exclusions mirror the %post cleanup of build debris.
+tar -C "$REPO_ROOT" \
+    --exclude=./.git --exclude=./build --exclude=./anaconda \
+    -czf "$TEMP_RESULT_ROOT/payload.tar.gz" .
 
 # The container script lives in a quoted heredoc: nothing is expanded on the
 # host; everything it needs is passed in via podman -e (KICKSTART_NAME,
 # FEDORA_RELEASE). This keeps the quoting trivial and shellcheck clean.
 CONTAINER_SCRIPT="$(cat <<'PROMETHEAN_CONTAINER_SCRIPT_EOF'
 set -euo pipefail
-# Fail fast if loop devices are unusable in this container: livemedia-creator
-# --no-virt attaches the disk image with `losetup --find --show` and swallows
-# the losetup stderr, which made the CI failure in run 34311360230 opaque (it
-# logged only "exit status 1" after the whole dnf install). This probe costs
-# under a second and surfaces the real losetup error message.
-dd if=/dev/zero of=/tmp/loop-probe.img bs=1M count=8 status=none
-probe_loop="$(losetup --find --show /tmp/loop-probe.img)" || {
-  echo "FATAL: losetup probe failed - loop devices are not usable in this container (see losetup stderr above)." >&2
-  exit 1
-}
-echo "loop probe OK: attached ${probe_loop}"
-losetup -d "${probe_loop}"
-rm -f /tmp/loop-probe.img
-# anaconda + e2fsprogs are required by livemedia-creator --no-virt:
-# anaconda runs the kickstart install directly on the host container
-# ("no-virt requires anaconda to be installed.") and mkfs.ext4 builds
-# the rootfs image. qemu/ovmf are only needed by --virt installs.
-# policycoreutils (/usr/sbin/load_policy): anaconda invokes it while shutting
-# down after a failed transaction; without it the real failure is masked by
-# "AnacondaError: [Errno 2] No such file or directory: /usr/sbin/load_policy"
-# (CI run 34399471667).
-dnf -y install anaconda e2fsprogs lorax livemedia-creator isomd5sum pykickstart policycoreutils
+# qemu + qemu-img are what the virt install runs: lmc boots the Anaconda
+# installer ISO in qemu-system-x86_64 and writes the rootfs to a qcow2/raw
+# disk image. anaconda/e2fsprogs/policycoreutils were only needed by the
+# retired --no-virt path (anaconda ran directly in the container; setfiles is
+# only invoked by pylorax novirt_install). edk2-ovmf is not needed: the VM
+# boots BIOS/SeaBIOS by default (no --virt-uefi).
+dnf -y install qemu-system-x86-core qemu-img lorax livemedia-creator isomd5sum pykickstart
 lmc_rc=0
 livemedia-creator \
   --make-iso \
-  --no-virt \
+  --iso=/tmp/live-root/installer.iso \
+  --ram=4096 \
+  --vcpus=4 \
   --nomacboot \
   --extra-boot-args="console=ttyS0,115200" \
   --ks=/workspace/kickstarts/$KICKSTART_NAME \
+  --ks=/tmp/live-root/payload.tar.gz \
   --resultdir=/tmp/live-root/result \
   --volid="PROMETHEANOS" \
   --iso-name="PrometheanOS-KDE.iso" \
@@ -127,13 +153,23 @@ PROMETHEAN_CONTAINER_SCRIPT_EOF
 )"
 
 podman_rc=0
-"${RUN_AS_ROOT[@]}" podman run --rm \
-  --privileged \
-  -e KICKSTART_NAME="$(basename "$KICKSTART_FILE")" \
-  -e FEDORA_RELEASE="$FEDORA_RELEASE" \
-  -v "$REPO_ROOT:/workspace:Z" \
-  -v "$TEMP_RESULT_ROOT:/tmp/live-root:Z" \
-  -w /workspace \
+podman_args=(
+  --rm
+  --privileged
+  -e KICKSTART_NAME="$(basename "$KICKSTART_FILE")"
+  -e FEDORA_RELEASE="$FEDORA_RELEASE"
+  -v "$REPO_ROOT:/workspace:Z"
+  -v "$TEMP_RESULT_ROOT:/tmp/live-root:Z"
+  -w /workspace
+)
+# KVM speed insurance: lmc's qemu enables accel=kvm iff /dev/kvm is visible
+# inside the container (pylorax QEMUInstall). GitHub runners have no /dev/kvm
+# and fall back to TCG (slow but supported); pass the device through when the
+# host has one. No behavior change when it is absent.
+if [[ -e /dev/kvm ]]; then
+  podman_args+=(--device=/dev/kvm)
+fi
+"${RUN_AS_ROOT[@]}" podman run "${podman_args[@]}" \
   "$CONTAINER_IMAGE" \
   bash -lc "$CONTAINER_SCRIPT" || podman_rc=$?
 if [[ $podman_rc -ne 0 ]]; then

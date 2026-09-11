@@ -12,11 +12,17 @@ timezone UTC --utc
 network --bootproto=dhcp --device=link --activate
 
 rootpw --lock
-# livemedia-creator --no-virt --make-iso requires a single / part to size the
-# rootfs image (calculate_disk_size raises "No / partition in the kickstart"
-# without it). Same pattern as lorax's own fedora-livemedia.ks example.
+# livemedia-creator sizes the build disk image from this partition
+# (calculate_disk_size raises "No / partition in the kickstart" without it)
+# and anaconda creates it inside the installer VM. Same pattern as lorax's
+# own fedora-livemedia.ks example.
 # 12288 MiB: anaconda requires the transaction to fit the / filesystem and the full KDE live set installs ~8.9 GB (run 34403642413: dnf "needs 720MB more space" at 8192); the ISO payload is squashfs-compressed, so this only affects build-time disk on a sparse image.
 part / --size=12288
+# livemedia-creator's virt install only sees qemu exit when anaconda powers
+# the VM off; without `shutdown` the VM resets and lmc waits forever
+# (pylorax LogMonitor has no completion signal without it). Same directive as
+# lorax's own fedora-livemedia.ks; it affects nothing in the built image.
+shutdown
 user --name=promethean --groups=wheel --shell=/bin/bash
 
 %packages
@@ -54,12 +60,37 @@ dracut-config-generic
 kernel-modules
 # lorax's x86.tmpl builds the BIOS El Torito image from <installed-root>/usr/lib/grub/i386-pc; anaconda --dirinstall doesn't install BIOS modules, so grub2-pc-modules must be listed here (run 34535387943 moddep.lst evidence)
 grub2-pc-modules
+# lorax's live x86.tmpl only builds the ISO's EFI/BOOT tree if
+# boot/efi/EFI/*/gcdx64.efi exists in the installed root, yet grafts
+# EFI/BOOT= unconditionally into xorrisofs - without these packages the
+# whole build dies there (run 34546284062: "xorriso : FAILURE : Cannot
+# determine attributes of source file '.../EFI/BOOT'"). Same set lorax's
+# own fedora-livemedia.ks adds for x86_64. The %post below copies the
+# staged binaries into boot/efi/EFI/fedora: F44 ships them under
+# /usr/lib/efi/... and a BIOS-booted build VM never creates the ESP.
+shim-x64
+grub2-efi-x64
+grub2-efi-x64-cdboot
+efibootmgr
 %end
 
 %post --nochroot --log=/mnt/sysimage/root/promethean-copy.log --erroronfail
 set -eu
 install -d -m 0755 /mnt/sysimage/srv/promethean
-cp -a /workspace/. /mnt/sysimage/srv/promethean/
+# The virt install VM has no /workspace (lmc injects only the kickstart and
+# the extra --ks files into the VM's initrd). The repo payload arrives as
+# payload.tar.gz at the initrd root; the anaconda installer runtime ships
+# tar (lorax runtime-install.tmpl: installpkg tar xz curl bzip2).
+# A /workspace bind mount only exists in container-direct builds, which are
+# kept as a fallback.
+if [[ -s /payload.tar.gz ]]; then
+    tar -xzf /payload.tar.gz -C /mnt/sysimage/srv/promethean/
+elif [[ -d /workspace ]]; then
+    cp -a /workspace/. /mnt/sysimage/srv/promethean/
+else
+    echo "FATAL: no repo payload found (expected /payload.tar.gz or /workspace)" >&2
+    exit 1
+fi
 # The rm also sweeps build debris: build.sh's temp result root was once inside
 # the repo (now /tmp), and any future in-repo output dir (build/) must never be
 # baked into the image (CI run 34522793350: 12 GB disk image copied into target).
@@ -68,6 +99,18 @@ rm -rf /mnt/sysimage/srv/promethean/.git /mnt/sysimage/srv/promethean/.pytest_ca
 
 %post --log=/root/promethean-post.log --erroronfail
 set -eu
+# lorax's live x86.tmpl sources the ISO's EFI/BOOT tree from
+# boot/efi/EFI/*/gcdx64.efi (+shimx64/mm). On F44 the EFI packages stage
+# those binaries under /usr/lib/efi/<ver>/EFI/fedora, and the build VM boots
+# BIOS so anaconda never creates the ESP vendor dir - copy them where the
+# template looks. No-op if something already populated it.
+efi_vendor=/boot/efi/EFI/fedora
+if [[ ! -e "$efi_vendor/gcdx64.efi" && -d /usr/lib/efi ]]; then
+    install -d -m 0755 "$efi_vendor"
+    cp -a /usr/lib/efi/grub2/*/EFI/fedora/gcdx64.efi "$efi_vendor/" 2>/dev/null || true
+    cp -a /usr/lib/efi/shim/*/EFI/fedora/shimx64.efi "$efi_vendor/" 2>/dev/null || true
+    cp -a /usr/lib/efi/shim/*/EFI/fedora/mmx64.efi "$efi_vendor/" 2>/dev/null || true
+fi
 # Mirror Fedora's liveuser pattern (livesys-scripts): the autologin user gets
 # an EMPTY password, not a locked one. SDDM's sddm-autologin PAM stack uses
 # pam_permit for auth, but a locked password field is the known cause of

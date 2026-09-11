@@ -107,6 +107,11 @@ be overridden, for example:
 FEDORA_RELEASE=44 OUTPUT_DIR="$PWD/build/output" ./build.sh
 ```
 
+The virt build boots a Fedora 44 netinst installer ISO, downloaded from
+`FEDORA_INSTALL_ISO_URL` (set it to an existing local file to skip the
+download); bump it together with `FEDORA_RELEASE` — the netinst filename
+embeds the release.
+
 ### Kickstart customization
 
 The main installation definition is:
