@@ -1,6 +1,7 @@
 # First testable PrometheanOS Fedora KDE live image.
-# This file is consumed by livemedia-creator --make=live. It intentionally
-# contains no disk, bootloader, clearpart, or reboot directives.
+# This file is consumed by livemedia-creator --make-iso (virt install). It
+# initializes lmc's disposable installer-VM disk (zerombr + clearpart --all)
+# and contains no bootloader, autopart, or reboot directives.
 
 url --mirrorlist="https://mirrors.fedoraproject.org/metalink?repo=fedora-${releasever}&arch=$basearch"
 repo --name=fedora --mirrorlist="https://mirrors.fedoraproject.org/metalink?repo=fedora-${releasever}&arch=$basearch"
@@ -17,6 +18,19 @@ rootpw --lock
 # and anaconda creates it inside the installer VM. Same pattern as lorax's
 # own fedora-livemedia.ks example.
 # 12288 MiB: anaconda requires the transaction to fit the / filesystem and the full KDE live set installs ~8.9 GB (run 34403642413: dnf "needs 720MB more space" at 8192); the ISO payload is squashfs-compressed, so this only affects build-time disk on a sparse image.
+# The virt install runs anaconda against a blank virtual disk (auto-sized to
+# 12290 MiB from the part line below). Without a disk-init directive anaconda
+# refuses to initialize it (disk_initialization.can_initialize: "The disk
+# cannot be initialized." unless format_unrecognized is set by clearpart/
+# zerombr), so blivet's do_partitioning sees disks=[] (it only considers
+# storage.partitioned, i.e. disks that already carry a disklabel) and fails
+# with PartitioningError "Unable to allocate requested partition scheme"
+# (run 34647960864). zerombr + clearpart --all is exactly what lorax's own
+# docs prescribe for lmc kickstarts (docs/livemedia-creator.rst). Both act
+# only on the throwaway VM disk; the final ISO is composed from the
+# installed tree's squashfs, so nothing in the image changes.
+zerombr
+clearpart --all
 part / --size=12288
 # livemedia-creator's virt install only sees qemu exit when anaconda powers
 # the VM off; without `shutdown` the VM resets and lmc waits forever
