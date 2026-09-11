@@ -1,4 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  OPTIONAL firewalld service definition for the local-AI stack (etc/promethean/compose.yaml):
+  tcp 11434 ollama, 8000 vLLM, 3000 Open WebUI, 8188 ComfyUI. NOT installed by the
+  live image: every AI endpoint binds 127.0.0.1 and loopback traffic bypasses
+  firewalld zones, so installing this service would only widen the network attack
+  surface (docs/SECURITY_PERMISSIONS.md favors loopback + minimal surface). Install
+  it only if you rebind an endpoint to an external interface: copy this file to
+  /etc/firewalld/services/ and reload firewalld.
+-->
 <service>
   <short>Promethean Local AI</short>
   <description>Local-only access for AI inference endpoints and control services.</description>
