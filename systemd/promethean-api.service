@@ -16,6 +16,12 @@ PrivateTmp=true
 ProtectSystem=full
 ProtectHome=yes
 ReadWritePaths=/var/log /data/models
+# profile.d does not apply to systemd services; these mirror /etc/profile.d/promethean.sh
+Environment=HF_HOME=/data/models/huggingface
+Environment=HUGGINGFACE_HUB_CACHE=/data/models/huggingface
+Environment=OLLAMA_MODELS=/data/models/ollama
+Environment=XDG_CACHE_HOME=/data/models/cache
+Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONPATH=/srv/promethean
 
 [Install]

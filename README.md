@@ -171,6 +171,12 @@ This repository aims to support a first bootable Fedora KDE live image for QEMU 
 4. verify the live environment reaches the Fedora KDE desktop and systemd is healthy
 5. check Promethean services and telemetry endpoints from the running system
 
+The Build PrometheanOS ISO workflow automates this flow in CI: it builds the ISO on a
+GitHub-hosted runner, boots it under QEMU, and asserts the serial-log boot markers
+(`Reached target Graphical Interface`, `SDDM`) in place of manual step 4, then uploads
+the ISO and the serial log as run artifacts. It triggers on pushes to
+`fix/iso-build-pipeline` (workflow dispatch is blocked for the CI integration token).
+
 Known limitations for the current Alpha 0.1 milestone:
 
 - this is a Fedora KDE live image, not a full installed OS deployment yet
@@ -191,6 +197,13 @@ The repository includes GitHub Actions workflows for validation:
 
 - `.github/workflows/lint.yml` runs shellcheck on shell scripts and ruff on Python files
 - `.github/workflows/kickstart-validate.yml` runs `ksvalidator` against Kickstart files
+- `.github/workflows/build-iso.yml` (Build PrometheanOS ISO) builds the live ISO and
+  then runs a QEMU boot smoke test that asserts the serial-log boot markers
+  (`Reached target Graphical Interface`, `SDDM`). Each run uploads the ISO
+  (`PrometheanOS-KDE-ISO`) and the QEMU serial log (`qemu-serial-log`) as artifacts.
+  The workflow carries a branch-scoped `push` trigger on `fix/iso-build-pipeline`
+  because workflow dispatch is blocked for the CI integration token; pushes to that
+  branch start builds automatically.
 
 Run the local backend tests with:
 
@@ -204,6 +217,10 @@ python3 -m pytest -q
 - destructive actions require confirmation and privileged intent
 - GPU runtime setup is explicit and hardware-aware
 - logs are kept in standard system locations such as `/var/log/promethean-hardware.log`
+- `firewalld/promethean-localhost.xml` is an optional, not-installed-by-default firewalld
+  service definition for the local-AI stack (`etc/promethean/compose.yaml`); the live image
+  keeps the default zone configuration untouched because every AI endpoint binds 127.0.0.1
+  and loopback traffic bypasses firewalld zones
 
 ## Future directions
 
