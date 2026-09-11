@@ -52,6 +52,8 @@ nss-mdns
 dracut-live
 dracut-config-generic
 kernel-modules
+# lorax's x86.tmpl builds the BIOS El Torito image from <installed-root>/usr/lib/grub/i386-pc; anaconda --dirinstall doesn't install BIOS modules, so grub2-pc-modules must be listed here (run 34535387943 moddep.lst evidence)
+grub2-pc-modules
 %end
 
 %post --nochroot --log=/mnt/sysimage/root/promethean-copy.log --erroronfail
