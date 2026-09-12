@@ -23,14 +23,36 @@ fi
 
 OVMF_CODE="${OVMF_CODE:-}"
 if [[ -z "$OVMF_CODE" ]]; then
-  for candidate in /usr/share/edk2/ovmf/OVMF_CODE.fd /usr/share/OVMF/OVMF_CODE.fd /usr/share/edk2/ovmf/OVMF_CODE_4M.fd; do
+  # Candidate order: distro OVMF code images first (plain then 4M), then
+  # combined firmware images, then qemu's own EDK2 blob. Ubuntu 24.04's ovmf
+  # package ships NO plain OVMF_CODE.fd - only OVMF_CODE_4M.fd plus combined
+  # /usr/share/ovmf/OVMF.fd and /usr/share/qemu/OVMF.fd (CI run 34657407475
+  # failed discovery because only the missing path was listed for Ubuntu).
+  for candidate in \
+    /usr/share/edk2/ovmf/OVMF_CODE.fd \
+    /usr/share/OVMF/OVMF_CODE.fd \
+    /usr/share/OVMF/OVMF_CODE_4M.fd \
+    /usr/share/edk2/ovmf/OVMF_CODE_4M.fd \
+    /usr/share/ovmf/OVMF.fd \
+    /usr/share/qemu/OVMF.fd \
+    /usr/share/edk2-ovmf/x64/OVMF_CODE.fd \
+    /usr/share/qemu/edk2-x86_64-code.fd; do
     if [[ -f "$candidate" ]]; then OVMF_CODE="$candidate"; break; fi
   done
 fi
+# Last resort: search the standard firmware trees so a renamed/republished
+# package layout cannot break discovery again.
 if [[ -z "$OVMF_CODE" ]]; then
-  echo "UEFI firmware not found. Set OVMF_CODE to an OVMF_CODE.fd file." >&2
+  OVMF_CODE="$(find /usr/share/OVMF /usr/share/ovmf /usr/share/edk2 /usr/share/edk2-ovmf /usr/share/qemu \
+      -maxdepth 3 \( -name 'OVMF_CODE*.fd' -o -name 'OVMF.fd' -o -name 'edk2-x86_64-code.fd' \) -print 2>/dev/null \
+      | sort | head -n 1 || true)"
+fi
+if [[ -z "$OVMF_CODE" ]]; then
+  echo "UEFI firmware not found. Set OVMF_CODE to an OVMF_CODE.fd file" >&2
+  echo "(searched: /usr/share/OVMF /usr/share/ovmf /usr/share/edk2 /usr/share/edk2-ovmf /usr/share/qemu)." >&2
   exit 1
 fi
+echo "Using OVMF firmware: $OVMF_CODE"
 
 mkdir -p "$(dirname "$SERIAL_LOG")"
 : > "$SERIAL_LOG"
