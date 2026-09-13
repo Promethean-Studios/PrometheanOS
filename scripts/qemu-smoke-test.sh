@@ -22,19 +22,21 @@ if ! command -v qemu-system-x86_64 >/dev/null 2>&1; then
 fi
 
 OVMF_CODE="${OVMF_CODE:-}"
+OVMF_VARS="${OVMF_VARS:-}"
 if [[ -z "$OVMF_CODE" ]]; then
-  # Candidate order: distro OVMF code images first (plain then 4M), then
-  # combined firmware images, then qemu's own EDK2 blob. Ubuntu 24.04's ovmf
-  # package ships NO plain OVMF_CODE.fd - only OVMF_CODE_4M.fd plus combined
-  # /usr/share/ovmf/OVMF.fd and /usr/share/qemu/OVMF.fd (CI run 34657407475
-  # failed discovery because only the missing path was listed for Ubuntu).
+  # Discovery order: pflash code-image PAIRS first (a matching VARS store is
+  # resolved below), then combined code+vars images, then qemu's standalone
+  # blob. qemu's x86 -bios loader only accepts firmware whose size is a
+  # multiple of 64 KiB: Ubuntu 24.04's OVMF_CODE_4M.fd is 3,653,632 bytes
+  # (0x37C000) - NOT 64 KiB aligned - so -bios fails with "could not load
+  # PC BIOS" (run 34701616631). Code-only images must use pflash.
   for candidate in \
-    /usr/share/edk2/ovmf/OVMF_CODE.fd \
-    /usr/share/OVMF/OVMF_CODE.fd \
     /usr/share/OVMF/OVMF_CODE_4M.fd \
-    /usr/share/edk2/ovmf/OVMF_CODE_4M.fd \
+    /usr/share/OVMF/OVMF_CODE.fd \
     /usr/share/ovmf/OVMF.fd \
     /usr/share/qemu/OVMF.fd \
+    /usr/share/edk2/ovmf/OVMF_CODE.fd \
+    /usr/share/edk2/ovmf/OVMF_CODE_4M.fd \
     /usr/share/edk2-ovmf/x64/OVMF_CODE.fd \
     /usr/share/qemu/edk2-x86_64-code.fd; do
     if [[ -f "$candidate" ]]; then OVMF_CODE="$candidate"; break; fi
@@ -52,7 +54,41 @@ if [[ -z "$OVMF_CODE" ]]; then
   echo "(searched: /usr/share/OVMF /usr/share/ovmf /usr/share/edk2 /usr/share/edk2-ovmf /usr/share/qemu)." >&2
   exit 1
 fi
-echo "Using OVMF firmware: $OVMF_CODE"
+
+# Firmware invocation by image type:
+# - OVMF_CODE*.fd are code-only pflash images: pair with a WRITABLE copy of
+#   the matching OVMF_VARS*.fd store (vars must be writable at runtime).
+# - combined images (OVMF.fd, code+vars in one) and qemu's standalone
+#   edk2-x86_64-code.fd load via plain -bios.
+FIRMWARE_ARGS=()
+if [[ "$(basename "$OVMF_CODE")" == OVMF_CODE*.fd ]]; then
+  if [[ -z "$OVMF_VARS" ]]; then
+    variant="$(basename "$OVMF_CODE" | sed 's/^OVMF_CODE/OVMF_VARS/')"
+    for vcand in "$(dirname "$OVMF_CODE")/$variant" \
+                 "$(dirname "$OVMF_CODE")"/OVMF_VARS*.fd \
+                 /usr/share/OVMF/OVMF_VARS_4M.fd \
+                 /usr/share/OVMF/OVMF_VARS.fd; do
+      if [[ -f "$vcand" ]]; then OVMF_VARS="$vcand"; break; fi
+    done
+  fi
+  if [[ -z "$OVMF_VARS" ]]; then
+    OVMF_VARS="$(find /usr/share/OVMF /usr/share/ovmf /usr/share/edk2 /usr/share/edk2-ovmf \
+        -maxdepth 3 -name 'OVMF_VARS*.fd' -print 2>/dev/null | sort | head -n 1 || true)"
+  fi
+  if [[ -z "$OVMF_VARS" ]]; then
+    echo "OVMF VARS store not found for $OVMF_CODE (set OVMF_VARS)." >&2
+    exit 1
+  fi
+  VARS_COPY="$(mktemp "${TMPDIR:-/tmp}/ovmf-vars.XXXXXX.fd")"
+  cp "$OVMF_VARS" "$VARS_COPY"
+  trap 'rm -f "$VARS_COPY"' EXIT
+  FIRMWARE_ARGS=(-drive "if=pflash,format=raw,readonly=on,file=$OVMF_CODE" \
+                 -drive "if=pflash,format=raw,file=$VARS_COPY")
+  echo "Using OVMF firmware: $OVMF_CODE + VARS $OVMF_VARS (pflash)"
+else
+  FIRMWARE_ARGS=(-bios "$OVMF_CODE")
+  echo "Using OVMF firmware: $OVMF_CODE (-bios)"
+fi
 
 mkdir -p "$(dirname "$SERIAL_LOG")"
 : > "$SERIAL_LOG"
@@ -64,7 +100,7 @@ timeout --foreground "${BOOT_SECONDS}s" qemu-system-x86_64 \
   -cpu max \
   -m "$RAM_MB" \
   -smp "$CPUS" \
-  -bios "$OVMF_CODE" \
+  "${FIRMWARE_ARGS[@]}" \
   -cdrom "$ISO" \
   -boot d \
   -display none \
