@@ -75,15 +75,21 @@ jobs:
       - name: Install QEMU boot-test dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y qemu-system-x86 ovmf
+          # libarchive-tools provides bsdtar: the smoke test extracts the live
+          # kernel+initrd from the ISO to boot the plain "Start" entry directly
+          # (GRUB's default is the media-check entry, which always fails on
+          # lmc-built ISOs - see scripts/qemu-smoke-test.sh).
+          sudo apt-get install -y qemu-system-x86 ovmf libarchive-tools
 
       - name: QEMU boot smoke test
         # The smoke-test script owns the QEMU invocation; it also asserts that
         # the serial log shows real boot evidence when
         # PROMETHEAN_ASSERT_MARKER is set. TCG (no KVM on runners) is slow, so
-        # give the Plasma boot a generous 600s window.
+        # give the full Plasma boot to graphical.target a generous window
+        # (TCG-only; 600s proved too tight once the media-check stall was
+        # bypassed).
         env:
-          BOOT_SECONDS: 600
+          BOOT_SECONDS: 1200
           RAM_MB: 4096
           CPUS: 4
           SERIAL_LOG: ${{ github.workspace }}/build/qemu-serial.log

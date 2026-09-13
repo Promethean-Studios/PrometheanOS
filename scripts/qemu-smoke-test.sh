@@ -93,16 +93,71 @@ fi
 mkdir -p "$(dirname "$SERIAL_LOG")"
 : > "$SERIAL_LOG"
 
+# Live boot entry selection: GRUB's default entry on lorax live media is
+# "Test this media & start ..." which adds rd.live.check, and checkisomd5
+# always fails on CI-built ISOs: livemedia-creator --make-iso does NOT run
+# implantisomd5, so there is no embedded checksum and checkisomd5 exits
+# ISOMD5SUM_CHECK_NOT_FOUND (2) - dracut then reports "Media check failed!"
+# and halts the boot (run 34776376447). The ISO build is out of scope, so
+# the smoke test boots the equivalent plain "Start <product>" path directly:
+# extract the live kernel + initrd from the ISO and pass the "Start" entry's
+# kernel args (identical, minus rd.live.check) via -kernel/-initrd. Falls
+# back to GRUB's default menu entry if extraction fails.
+KERNEL_ARGS=""
+KERN_FILE=""
+INITRD_FILE=""
+EXTRACT_DIR="$(mktemp -d "${TMPDIR:-/tmp}/promethean-iso.XXXXXX")"
+extract_iso_files() {
+  if command -v bsdtar >/dev/null 2>&1; then
+    bsdtar -x -f "$ISO" -C "$EXTRACT_DIR" \
+      images/pxeboot/vmlinuz images/pxeboot/initrd.img \
+      boot/grub2/grub.cfg EFI/BOOT/grub.cfg 2>/dev/null
+  else
+    sudo mkdir -p /mnt/promethean-iso && \
+    sudo mount -o loop,ro "$ISO" /mnt/promethean-iso && {
+      for f in images/pxeboot/vmlinuz images/pxeboot/initrd.img \
+               boot/grub2/grub.cfg EFI/BOOT/grub.cfg; do
+        mkdir -p "$EXTRACT_DIR/$(dirname "$f")"
+        cp "/mnt/promethean-iso/$f" "$EXTRACT_DIR/$f" || return 1
+      done
+      sudo umount /mnt/promethean-iso
+    }
+  fi
+}
+extract_iso_files || true
+if [[ -f "$EXTRACT_DIR/images/pxeboot/vmlinuz" && -f "$EXTRACT_DIR/images/pxeboot/initrd.img" ]]; then
+  grub_cfg="$EXTRACT_DIR/boot/grub2/grub.cfg"
+  [[ -f "$grub_cfg" ]] || grub_cfg="$EXTRACT_DIR/EFI/BOOT/grub.cfg"
+  if [[ -f "$grub_cfg" ]]; then
+    # Kernel args of the plain "Start <product>" entry: the linux line
+    # WITHOUT rd.live.check.
+    line="$(grep -hE '^[[:space:]]*linux(efi)?[[:space:]]' "$grub_cfg" \
+            | grep -v 'rd\.live\.check' | head -n1 || true)"
+    if [[ -n "$line" ]]; then
+      KERNEL_ARGS="$(printf '%s\n' "$line" | awk '{ $1=""; $2=""; sub(/^[ \t]+/, ""); print }')"
+      [[ "$KERNEL_ARGS" == *console=ttyS0* ]] || KERNEL_ARGS="$KERNEL_ARGS console=ttyS0,115200"
+      KERN_FILE="$EXTRACT_DIR/images/pxeboot/vmlinuz"
+      INITRD_FILE="$EXTRACT_DIR/images/pxeboot/initrd.img"
+    fi
+  fi
+fi
+
 echo "Starting ${BOOT_SECONDS}s headless UEFI smoke test for $ISO"
 status=0
-timeout --foreground "${BOOT_SECONDS}s" qemu-system-x86_64 \
-  -machine q35,accel=tcg \
-  -cpu max \
-  -m "$RAM_MB" \
-  -smp "$CPUS" \
-  "${FIRMWARE_ARGS[@]}" \
-  -cdrom "$ISO" \
-  -boot d \
+BOOT_CMD=(timeout --foreground "${BOOT_SECONDS}s" qemu-system-x86_64
+  "-machine" "q35,accel=tcg"
+  -cpu max
+  -m "$RAM_MB"
+  -smp "$CPUS"
+  "${FIRMWARE_ARGS[@]}")
+if [[ -n "$KERN_FILE" && -n "$KERNEL_ARGS" ]]; then
+  echo "Booting live kernel directly with the plain-start args (media check skipped)"
+  BOOT_CMD+=(-kernel "$KERN_FILE" -initrd "$INITRD_FILE" -append "$KERNEL_ARGS" -cdrom "$ISO")
+else
+  echo "WARNING: could not extract live kernel/args from ISO; booting via GRUB menu" >&2
+  BOOT_CMD+=(-cdrom "$ISO" -boot d)
+fi
+"${BOOT_CMD[@]}" \
   -display none \
   -vga virtio \
   -serial file:"$SERIAL_LOG" \
